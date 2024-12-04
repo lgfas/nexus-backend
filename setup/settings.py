@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'apps.clientes',
     'apps.faturas',
+    'apps.parceiros',
 ]
 
 MIDDLEWARE = [
