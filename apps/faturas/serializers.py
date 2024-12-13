@@ -1,3 +1,5 @@
+from datetime import date
+
 from rest_framework import serializers
 from .models import ContaEnergia, ItensFatura
 from apps.clientes.models import Cliente
@@ -47,3 +49,6 @@ class ContaEnergiaSerializer(serializers.ModelSerializer):
                 'proxima_leitura': 'A data da próxima leitura deve ser futura.'
             })
         return data
+
+class UploadFaturaSerializer(serializers.Serializer):
+    file = serializers.FileField()

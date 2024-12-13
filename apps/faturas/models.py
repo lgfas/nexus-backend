@@ -13,6 +13,7 @@ class ContaEnergia(models.Model):
     leitura_atual = models.FloatField(validators=[MinValueValidator(0.0)])
     numero_dias = models.PositiveIntegerField()
     proxima_leitura = models.DateField()
+    demanda_contratada = models.FloatField()
 
     def clean(self):
         super().clean()
