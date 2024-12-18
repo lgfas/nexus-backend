@@ -1,16 +1,20 @@
-from datetime import date
-
 from rest_framework import serializers
-from .models import ContaEnergia, ItensFatura
+from .models import ContaEnergia, ItemFatura, ItemFinanceiro
 from apps.clientes.models import Cliente
 
-class ItensFaturaSerializer(serializers.ModelSerializer):
+class ItemFaturaSerializer(serializers.ModelSerializer):
     class Meta:
-        model = ItensFatura
+        model = ItemFatura
+        fields = '__all__'
+
+class ItemFinanceiroSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ItemFinanceiro
         fields = '__all__'
 
 class ContaEnergiaSerializer(serializers.ModelSerializer):
-    itens_fatura = ItensFaturaSerializer(many=True, read_only=True)
+    itens_fatura = ItemFaturaSerializer(many=True, read_only=True)
+    itens_financeiros = ItemFinanceiroSerializer(many=True, read_only=True)
     cliente_id = serializers.PrimaryKeyRelatedField(
         queryset=Cliente.objects.all(),
         source='cliente',
@@ -29,26 +33,7 @@ class ContaEnergiaSerializer(serializers.ModelSerializer):
             'leitura_atual',
             'numero_dias',
             'proxima_leitura',
+            'demanda_contratada',
             'itens_fatura',
+            'itens_financeiros',
         ]
-
-    def validate(self, data):
-        # Validar que leitura_atual >= leitura_anterior
-        if data['leitura_atual'] < data['leitura_anterior']:
-            raise serializers.ValidationError({
-                'leitura_atual': 'A leitura atual não pode ser menor que a leitura anterior.'
-            })
-        # Validar que vencimento >= mes
-        if data['vencimento'] < data['mes']:
-            raise serializers.ValidationError({
-                'vencimento': 'A data de vencimento não pode ser anterior ao mês de referência.'
-            })
-        # Validar que proxima_leitura > hoje
-        if data['proxima_leitura'] <= date.today():
-            raise serializers.ValidationError({
-                'proxima_leitura': 'A data da próxima leitura deve ser futura.'
-            })
-        return data
-
-class UploadFaturaSerializer(serializers.Serializer):
-    file = serializers.FileField()
