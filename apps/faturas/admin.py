@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import ContaEnergia, ItemFatura, ItemFinanceiro
+
+from .models import ContaEnergia, ItemFatura
 
 
 @admin.register(ContaEnergia)
@@ -18,16 +19,6 @@ class ItemFaturaAdmin(admin.ModelAdmin):
     list_display = (
         'id', 'conta_energia', 'descricao', 'quantidade',
         'preco_unitario', 'tarifa', 'pis_cofins', 'icms', 'valor'
-    )
-    search_fields = ('conta_energia__cliente__nome', 'descricao')
-    list_filter = ('conta_energia__mes',)
-    ordering = ('conta_energia',)
-
-
-@admin.register(ItemFinanceiro)
-class ItemFinanceiroAdmin(admin.ModelAdmin):
-    list_display = (
-        'id', 'conta_energia', 'descricao', 'valor'
     )
     search_fields = ('conta_energia__cliente__nome', 'descricao')
     list_filter = ('conta_energia__mes',)

@@ -1,10 +1,21 @@
 from django.db import models
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, MaxValueValidator
 from apps.clientes.models import Cliente
 
 class HistoricoConsumoDemanda(models.Model):
-    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, related_name='historicos_consumo_demanda')
-    mes = models.DateField()
+    cliente = models.ForeignKey(
+        Cliente,
+        on_delete=models.CASCADE,
+        related_name='historicos_consumo_demanda'
+    )
+
+    # Mês como número (1-12)
+    mes = models.IntegerField(
+        validators=[
+            MinValueValidator(1),  # Janeiro
+            MaxValueValidator(12) # Dezembro
+        ]
+    )
 
     # DEMANDA MEDIDA
     demanda_medida_ponta = models.FloatField(validators=[MinValueValidator(0.0)], blank=True, null=True)
@@ -21,4 +32,4 @@ class HistoricoConsumoDemanda(models.Model):
     horario_reservado_reativo_excedente = models.FloatField(validators=[MinValueValidator(0.0)], blank=True, null=True)
 
     def __str__(self):
-        return f"Histórico {self.cliente.nome} - {self.mes.strftime('%m/%Y')}"
+        return f"Histórico {self.cliente.nome} - Mês {self.mes}"
