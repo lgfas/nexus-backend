@@ -118,6 +118,42 @@ def extract_historico_data(pdf_path):
         raise ValueError(f"Erro ao extrair histórico: {e}")
 
 
+def extract_tributos(pdf_path):
+    try:
+        # Ler tabelas do PDF na página 1
+        tabelas = read_pdf(pdf_path, pages=1, multiple_tables=True, pandas_options={'header': None})
 
+        # Selecionar a tabela relevante (ajustar índice se necessário)
+        tabela_tributos = tabelas[2]
+
+        # Remover colunas indesejadas
+        tabela_tributos = tabela_tributos.drop(columns=[0, 1, 2, 3, 4, 5, 8, 9])
+
+        # Manter apenas as linhas relevantes (ICMS, PIS e COFINS)
+        tabela_tributos = tabela_tributos.iloc[2:5]
+
+        # Renomear colunas
+        tabela_tributos.columns = ["Tributo", "Base e Aliquota", "Valor(R$)"]
+
+        # Separar colunas combinadas
+        tabela_tributos[['Base(R$)', 'Aliquota(%)']] = tabela_tributos['Base e Aliquota'].str.split(' ', n=1, expand=True)
+
+        # Remover coluna combinada antiga
+        tabela_tributos = tabela_tributos.drop(columns=["Base e Aliquota"])
+
+        # Processar e retornar os tributos
+        tributos = []
+        for _, row in tabela_tributos.iterrows():
+            tributos.append({
+                "tipo": row["Tributo"].strip(),
+                "base": limpar_numero(row['Base(R$)']),
+                "aliquota": limpar_numero(row['Aliquota(%)']),
+                "valor": limpar_numero(row['Valor(R$)'])
+            })
+
+        return tributos
+
+    except Exception as e:
+        raise ValueError(f"Erro ao extrair tributos: {e}")
 
 

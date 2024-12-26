@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from apps.clientes.models import Cliente
-from .models import ContaEnergia
+from .models import ContaEnergia, Tributo
 from .models import ItemFatura
 
 
@@ -41,3 +41,9 @@ class ContaEnergiaSerializer(serializers.ModelSerializer):
             'demanda_contratada',
             'itens_fatura',
         ]
+
+class TributoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tributo
+        fields = '__all__'
+

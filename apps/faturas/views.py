@@ -6,9 +6,9 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import ContaEnergia, ItemFatura
-from .serializers import ContaEnergiaSerializer, ItemFaturaSerializer
-from .utils import extract_itens_fatura, extract_historico_data
+from .models import ContaEnergia, ItemFatura, Tributo
+from .serializers import ContaEnergiaSerializer, ItemFaturaSerializer, TributoSerializer
+from .utils import extract_itens_fatura, extract_historico_data, extract_tributos
 from ..clientes.models import Cliente
 from ..historicos.models import HistoricoConsumoDemanda
 
@@ -20,6 +20,10 @@ class ContaEnergiaViewSet(viewsets.ModelViewSet):
 class ItemFaturaViewSet(viewsets.ModelViewSet):
     queryset = ItemFatura.objects.all()
     serializer_class = ItemFaturaSerializer
+
+class TributoViewSet(viewsets.ModelViewSet):
+    queryset = Tributo.objects.all()
+    serializer_class = TributoSerializer
 
 class UploadFaturaAPIView(APIView):
     parser_classes = (MultiPartParser, FormParser)
@@ -56,6 +60,7 @@ class UploadFaturaAPIView(APIView):
             # Extrair dados
             itens_fatura = extract_itens_fatura(temp_path)
             historico_data = extract_historico_data(temp_path)
+            tributos_data = extract_tributos(temp_path)
 
             # Salvar itens de fatura
             for item in itens_fatura:
@@ -64,6 +69,10 @@ class UploadFaturaAPIView(APIView):
             # Salvar histórico
             for historico in historico_data:
                 HistoricoConsumoDemanda.objects.create(cliente=cliente, **historico)
+
+            # Salvar tributos
+            for tributo in tributos_data:
+                Tributo.objects.create(conta_energia=conta_energia, **tributo)
 
             # Remover arquivo temporário
             os.remove(temp_path)

@@ -39,3 +39,14 @@ class ItemFatura(models.Model):
 
     def __str__(self):
         return f"{self.descricao} - Conta ID {self.conta_energia.id}"
+
+class Tributo(models.Model):
+    conta_energia = models.ForeignKey(ContaEnergia, on_delete=models.CASCADE, related_name='tributos')
+    tipo = models.CharField(max_length=10)  # ICMS, PIS ou COFINS
+    base = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+    aliquota = models.DecimalField(max_digits=6, decimal_places=4, validators=[MinValueValidator(0)])
+    valor = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+
+    def __str__(self):
+        return f"{self.tipo} - {self.valor} - Conta {self.conta_energia.id}"
+
