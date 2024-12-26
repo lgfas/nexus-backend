@@ -1,5 +1,8 @@
+import os
 import pandas as pd
 from tabula import read_pdf
+import chardet
+
 
 def limpar_numero(valor):
     """
@@ -14,11 +17,29 @@ def limpar_numero(valor):
     except ValueError:
         return None
 
+
+def detect_encoding(pdf_path):
+    """
+    Detecta a codificação do arquivo PDF usando a biblioteca chardet.
+    """
+    with open(pdf_path, 'rb') as file:
+        raw_data = file.read()
+    result = chardet.detect(raw_data)
+    return result['encoding'] or 'utf-8'  # Usa UTF-8 como fallback
+
+
 def extract_itens_fatura(pdf_path):
     try:
-        tabelas = read_pdf(pdf_path, pages=1, multiple_tables=True, pandas_options={'header': None})
+        # Detecta a codificação do arquivo
+        encoding = detect_encoding(pdf_path)
+
+        # Extrai as tabelas do PDF
+        tabelas = read_pdf(pdf_path, pages=1, multiple_tables=True, pandas_options={'header': None}, encoding=encoding)
+
+        # Seleciona a tabela relevante
         tabela_itens = tabelas[2]  # Ajustar índice conforme necessário
 
+        # Preprocessamento da tabela
         tabela_itens = tabela_itens.drop([0, 1]).reset_index(drop=True)
         tabela_itens = tabela_itens.iloc[:, :7]
         tabela_itens.columns = [
@@ -26,6 +47,7 @@ def extract_itens_fatura(pdf_path):
         ]
         tabela_itens = tabela_itens.dropna(subset=["Itens de Fatura"]).reset_index(drop=True)
 
+        # Processamento dos dados
         dados = []
         for _, row in tabela_itens.iterrows():
             valores = str(row["Itens de Fatura"]).split()
@@ -60,58 +82,36 @@ def mes_para_numero(abreviacao):
 
 def extract_historico_data(pdf_path):
     try:
+        # Detecta a codificação do arquivo
+        encoding = detect_encoding(pdf_path)
+
         # Ler as tabelas do PDF na página 2
-        tabelas = read_pdf(pdf_path, pages=2, multiple_tables=True, pandas_options={'header': None})
+        tabelas = read_pdf(pdf_path, pages=2, multiple_tables=True, pandas_options={'header': None}, encoding=encoding)
 
-        # Selecionar a tabela correta (primeira tabela)
+        # Selecionar a tabela correta
         tabela_historico = tabelas[0]
-
-        # Remover linhas vazias e redefinir índice
         tabela_historico = tabela_historico.dropna(how='all').reset_index(drop=True)
 
-        # Definir nomes das colunas (com distinções para colunas repetidas)
-        colunas = [
-            "MÊS",
-            "demanda_medida_ponta",
-            "demanda_medida_fora_ponta",
-            "demanda_medida_reativo_excedente",
-            "consumo_faturado_ponta_tot",
-            "consumo_faturado_fora_ponta",
-            "consumo_faturado_reativo_excedente",
-            "horario_reservado_consumo",
-            "horario_reservado_reativo_excedente"
-        ]
-
-        # Processar os valores das linhas
+        # Processar valores
         dados = []
-        for _, row in tabela_historico.iloc[3:16].iterrows():  # Ignorar as primeiras três linhas
-            # Combinar os valores das colunas dividindo-os corretamente
+        for _, row in tabela_historico.iloc[3:16].iterrows():
             valores = (
-                row[0].split() +  # Mês e demanda
-                row[2].split() +  # Consumo faturado
-                row[3].split()    # Horário reservado
+                row[0].split() +
+                row[2].split() +
+                row[3].split()
             )
-
-            # Validar quantidade de valores
-            if len(valores) >= len(colunas):
-                linha = dict(zip(colunas, valores[:len(colunas)]))
-
-                # Converter 'MÊS' para número inteiro (1-12)
-                linha['MÊS'] = mes_para_numero(linha['MÊS'])
-
-                # Converter os valores para o formato esperado (float)
+            if len(valores) >= 9:
                 dados.append({
-                    "mes": linha["MÊS"],
-                    "demanda_medida_ponta": limpar_numero(linha["demanda_medida_ponta"]),
-                    "demanda_medida_fora_ponta": limpar_numero(linha["demanda_medida_fora_ponta"]),
-                    "demanda_medida_reativo_excedente": limpar_numero(linha["demanda_medida_reativo_excedente"]),
-                    "consumo_faturado_ponta_tot": limpar_numero(linha["consumo_faturado_ponta_tot"]),
-                    "consumo_faturado_fora_ponta": limpar_numero(linha["consumo_faturado_fora_ponta"]),
-                    "consumo_faturado_reativo_excedente": limpar_numero(linha["consumo_faturado_reativo_excedente"]),
-                    "horario_reservado_consumo": limpar_numero(linha["horario_reservado_consumo"]),
-                    "horario_reservado_reativo_excedente": limpar_numero(linha["horario_reservado_reativo_excedente"]),
+                    "mes": mes_para_numero(valores[0]),
+                    "demanda_medida_ponta": limpar_numero(valores[1]),
+                    "demanda_medida_fora_ponta": limpar_numero(valores[2]),
+                    "demanda_medida_reativo_excedente": limpar_numero(valores[3]),
+                    "consumo_faturado_ponta_tot": limpar_numero(valores[4]),
+                    "consumo_faturado_fora_ponta": limpar_numero(valores[5]),
+                    "consumo_faturado_reativo_excedente": limpar_numero(valores[6]),
+                    "horario_reservado_consumo": limpar_numero(valores[7]),
+                    "horario_reservado_reativo_excedente": limpar_numero(valores[8]),
                 })
-
         return dados
 
     except Exception as e:
@@ -120,28 +120,21 @@ def extract_historico_data(pdf_path):
 
 def extract_tributos(pdf_path):
     try:
+        # Detecta a codificação do arquivo
+        encoding = detect_encoding(pdf_path)
+
         # Ler tabelas do PDF na página 1
-        tabelas = read_pdf(pdf_path, pages=1, multiple_tables=True, pandas_options={'header': None})
+        tabelas = read_pdf(pdf_path, pages=1, multiple_tables=True, pandas_options={'header': None}, encoding=encoding)
 
-        # Selecionar a tabela relevante (ajustar índice se necessário)
         tabela_tributos = tabelas[2]
-
-        # Remover colunas indesejadas
         tabela_tributos = tabela_tributos.drop(columns=[0, 1, 2, 3, 4, 5, 8, 9])
 
-        # Manter apenas as linhas relevantes (ICMS, PIS e COFINS)
         tabela_tributos = tabela_tributos.iloc[2:5]
-
-        # Renomear colunas
         tabela_tributos.columns = ["Tributo", "Base e Aliquota", "Valor(R$)"]
 
-        # Separar colunas combinadas
         tabela_tributos[['Base(R$)', 'Aliquota(%)']] = tabela_tributos['Base e Aliquota'].str.split(' ', n=1, expand=True)
-
-        # Remover coluna combinada antiga
         tabela_tributos = tabela_tributos.drop(columns=["Base e Aliquota"])
 
-        # Processar e retornar os tributos
         tributos = []
         for _, row in tabela_tributos.iterrows():
             tributos.append({
@@ -150,10 +143,7 @@ def extract_tributos(pdf_path):
                 "aliquota": limpar_numero(row['Aliquota(%)']),
                 "valor": limpar_numero(row['Valor(R$)'])
             })
-
         return tributos
 
     except Exception as e:
         raise ValueError(f"Erro ao extrair tributos: {e}")
-
-
