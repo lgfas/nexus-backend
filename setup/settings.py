@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     'apps.faturas',
     'apps.parceiros',
     'apps.historicos',
+    'apps.tarifas',
 ]
 
 MIDDLEWARE = [
@@ -70,8 +71,12 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        'OPTIONS': {
+            'timeout': 30,  # Tempo limite aumentado para 30 segundos
+        },
     }
 }
+
 
 
 # Password validation
