@@ -17,30 +17,40 @@ class ItemFaturaSerializer(serializers.ModelSerializer):
                 data[field] = 0.0
         return data
 
-
 class ContaEnergiaSerializer(serializers.ModelSerializer):
-    itens_fatura = ItemFaturaSerializer(many=True, read_only=True)
-    cliente_id = serializers.PrimaryKeyRelatedField(
-        queryset=Cliente.objects.all(),
-        source='cliente',
-        write_only=True
-    )
-
     class Meta:
         model = ContaEnergia
         fields = [
-            'id',
-            'cliente_id',
-            'mes',
-            'vencimento',
-            'total_pagar',
-            'leitura_anterior',
-            'leitura_atual',
-            'numero_dias',
-            'proxima_leitura',
-            'demanda_contratada',
-            'itens_fatura',
+            'id', 'cliente', 'mes', 'vencimento', 'total_pagar',
+            'leitura_anterior', 'leitura_atual', 'proxima_leitura',
+            'numero_dias', 'subgrupo', 'tipo_tarifa_bt', 'tipo_tarifa_at',
+            'demanda_contratada_unica', 'demanda_contratada_ponta', 'demanda_contratada_fora_ponta',
+            'fator_potencia',
         ]
+
+    def validate(self, data):
+        subgrupo = data.get('subgrupo')
+        tipo_tarifa_bt = data.get('tipo_tarifa_bt')
+        tipo_tarifa_at = data.get('tipo_tarifa_at')
+
+        # Validações de Subgrupo BT
+        if subgrupo == 'BT':
+            if not tipo_tarifa_bt:
+                raise serializers.ValidationError({'tipo_tarifa_bt': 'Tipo de tarifa é obrigatório para BT.'})
+
+            if tipo_tarifa_at:
+                raise serializers.ValidationError({'tipo_tarifa_at': 'Tipo de tarifa AT não é permitido para BT.'})
+
+        # Validações de Subgrupo AT
+        if subgrupo == 'AT':
+            if not tipo_tarifa_at:
+                raise serializers.ValidationError({'tipo_tarifa_at': 'Tipo de tarifa é obrigatório para AT.'})
+
+            if tipo_tarifa_bt:
+                raise serializers.ValidationError({'tipo_tarifa_bt': 'Tipo de tarifa BT não é permitido para AT.'})
+
+        return data
+
 
 class TributoSerializer(serializers.ModelSerializer):
     class Meta:
