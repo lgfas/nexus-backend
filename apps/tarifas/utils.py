@@ -86,21 +86,46 @@ def processar_tarifas_csv(file):
     return {"status": "concluído"}
 
 
-def processar_tarifas_url(url):
+def processar_tarifas_api(base_url, resource_id):
     """
-    Processa tarifas baixadas diretamente de uma URL pública.
+    Processa tarifas obtidas via API pública da ANEEL com paginação e limite de registros.
     """
     try:
-        # Baixar dados do CSV via URL
-        response = requests.get(url)
-        if response.status_code != 200:
-            raise Exception(f"Erro ao acessar URL: {response.status_code}")
+        params = {
+            'resource_id': resource_id,
+            'limit': 100000,  # Limite por página
+            'offset': 0
+        }
 
-        # Carregar o CSV diretamente do texto baixado
-        csv_file = StringIO(response.text)
+        erros = []
+        while True:
+            # Requisição à API
+            response = requests.get(base_url, params=params)
+            if response.status_code != 200:
+                raise Exception(f"Erro na requisição à API: {response.status_code}")
 
-        # Processar usando a mesma função de arquivo local
-        resultado = processar_tarifas_csv(csv_file)
-        return resultado
+            # Extrair resultados
+            data = response.json()
+            records = data.get('result', {}).get('records', [])
+            if not records:
+                break  # Fim dos registros
+
+            # Converter para DataFrame e processar
+            df = pd.DataFrame(records)
+            resultado = processar_tarifas_csv(StringIO(df.to_csv(index=False)))
+
+            # Coletar erros, se houver
+            if resultado['status'] == 'concluído com erros':
+                erros.extend(resultado['detalhes'])
+
+            # Avançar para próxima página
+            params['offset'] += 100000
+
+        # Retornar resultado
+        if erros:
+            return {"status": "concluído com erros", "detalhes": erros[:10]}
+        return {"status": "concluído"}
     except Exception as e:
-        raise Exception(f"Erro ao processar URL: {e}")
+        raise Exception(f"Erro ao processar dados da API: {e}")
+
+

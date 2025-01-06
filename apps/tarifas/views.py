@@ -4,7 +4,7 @@ from rest_framework.views import APIView
 
 from .models import Distribuidora, Tarifa
 from .serializers import DistribuidoraSerializer, TarifaSerializer
-from .utils import processar_tarifas_csv, processar_tarifas_url
+from .utils import processar_tarifas_csv, processar_tarifas_api
 
 
 class DistribuidoraViewSet(viewsets.ModelViewSet):
@@ -35,14 +35,14 @@ class UploadTarifasCSVAPIView(APIView):
 
 class AtualizarTarifasAPIView(APIView):
     """
-    Atualiza tarifas via URL pública.
+    Atualiza tarifas via API pública da ANEEL.
     """
     def post(self, request, *args, **kwargs):
         try:
-            # URL pública fornecida
-            url = "https://dadosabertos.aneel.gov.br/path/to/tarifas.csv"  # Atualizar com URL válida
-            resultado = processar_tarifas_url(url)
+            base_url = "https://dadosabertos.aneel.gov.br/api/3/action/datastore_search"
+            resource_id = "fcf2906c-7c32-4b9b-a637-054e7a5234f4"  # ID do recurso
 
+            resultado = processar_tarifas_api(base_url, resource_id)
             return Response(resultado, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": f"Erro ao atualizar tarifas: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
