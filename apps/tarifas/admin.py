@@ -11,5 +11,5 @@ class DistribuidoraAdmin(admin.ModelAdmin):
 @admin.register(Tarifa)
 class TarifaAdmin(admin.ModelAdmin):
     list_display = ('distribuidora', 'data_inicio_vigencia', 'modalidade', 'subgrupo', 'tipo_tarifa', 'valor_tusd', 'valor_te')
-    list_filter = ('distribuidora', 'modalidade', 'subgrupo')
+    list_filter = ('distribuidora', 'modalidade', 'subgrupo', 'tipo_tarifa')
     search_fields = ('distribuidora__nome',)

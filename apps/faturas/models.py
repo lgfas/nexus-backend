@@ -5,31 +5,32 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 
 from apps.clientes.models import Cliente
+from apps.tarifas.models import Distribuidora
 
 
 class ContaEnergia(models.Model):
-    # Subgrupo: BT ou AT
+    # Subgrupos
     SUBGRUPO_CHOICES = [
-        ('BT', 'Baixa Tensão'),
-        ('AT', 'Alta Tensão'),
+        ('A1', 'A1'), ('A2', 'A2'), ('A3', 'A3'), ('A3a', 'A3a'),
+        ('A4', 'A4'), ('A4a', 'A4a'), ('A4b', 'A4b'), ('AS', 'AS'),
+        ('B', 'B'), ('B1', 'B1'), ('B2', 'B2'), ('B3', 'B3'), ('B4', 'B4'),
     ]
 
-    # Tipos de tarifa para Alta Tensão (AT)
-    TIPO_TARIFA_AT_CHOICES = [
-        ('Verde', 'Verde'),
-        ('Azul', 'Azul'),
-    ]
-
-    # Tipos de tarifa para Baixa Tensão (BT)
-    TIPO_TARIFA_BT_CHOICES = [
-        ('Convencional', 'Convencional'),
-        ('Branca', 'Branca'),
+    # Modalidades associadas
+    MODALIDADE_CHOICES = [
+        ('Azul', 'Azul'), ('Azul ABRACE CATIVO', 'Azul ABRACE CATIVO'),
+        ('Azul ABRACE LIVRE', 'Azul ABRACE LIVRE'), ('Verde', 'Verde'),
+        ('Verde ABRACE CATIVO', 'Verde ABRACE CATIVO'), ('Verde ABRACE LIVRE', 'Verde ABRACE LIVRE'),
+        ('Branca', 'Branca'), ('Convencional', 'Convencional'),
+        ('Convencional ABRACE', 'Convencional ABRACE'),
+        ('Convencional pré-pagamento', 'Convencional pré-pagamento'),
     ]
 
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, related_name='contas_energia')
+    distribuidora = models.ForeignKey(Distribuidora, on_delete=models.CASCADE, related_name='contas_energia')
     mes = models.DateField(help_text='Data referente ao mês de consumo (use o primeiro dia do mês).')
     vencimento = models.DateField()
-    total_pagar = models.DecimalField(max_digits=10, decimal_places=2)
+    total_pagar = models.DecimalField(max_digits=12, decimal_places=2)
 
     # Campos ajustados para 'date'
     leitura_anterior = models.DateField(help_text='Data da leitura anterior.')
@@ -38,24 +39,9 @@ class ContaEnergia(models.Model):
 
     numero_dias = models.PositiveIntegerField()
 
-    # Subgrupo
-    subgrupo = models.CharField(max_length=2, choices=SUBGRUPO_CHOICES, default='BT')
-
-    # Tipos de tarifa por subgrupo
-    tipo_tarifa_bt = models.CharField(
-        max_length=15,
-        choices=TIPO_TARIFA_BT_CHOICES,
-        blank=True,
-        null=True,
-        help_text='Usado apenas para subgrupo BT (Baixa Tensão).'
-    )
-    tipo_tarifa_at = models.CharField(
-        max_length=10,
-        choices=TIPO_TARIFA_AT_CHOICES,
-        blank=True,
-        null=True,
-        help_text='Usado apenas para subgrupo AT (Alta Tensão).'
-    )
+    # Subgrupo e modalidade
+    subgrupo = models.CharField(max_length=4, choices=SUBGRUPO_CHOICES)
+    modalidade = models.CharField(max_length=50, choices=MODALIDADE_CHOICES)
 
     # Demanda contratada
     demanda_contratada_unica = models.FloatField(
@@ -97,35 +83,9 @@ class ContaEnergia(models.Model):
         if self.proxima_leitura <= date.today():
             raise ValidationError('A data da próxima leitura deve ser futura.')
 
-        # Validações para Subgrupo BT (Baixa Tensão)
-        if self.subgrupo == 'BT':
-            if not self.tipo_tarifa_bt:
-                raise ValidationError('Tipo de tarifa (Convencional/Branca) é obrigatório para Baixa Tensão.')
-
-            if self.tipo_tarifa_at:
-                raise ValidationError('Tipo de tarifa Verde/Azul não é permitido para Baixa Tensão.')
-
-            if self.demanda_contratada_unica or self.demanda_contratada_ponta or self.demanda_contratada_fora_ponta:
-                raise ValidationError('Demanda contratada não se aplica a Baixa Tensão.')
-
-        # Validações para Subgrupo AT (Alta Tensão)
-        if self.subgrupo == 'AT':
-            if not self.tipo_tarifa_at:
-                raise ValidationError('Tipo de tarifa (Verde/Azul) é obrigatório para Alta Tensão.')
-
-            if self.tipo_tarifa_bt:
-                raise ValidationError('Tipo de tarifa Convencional/Branca não é permitido para Alta Tensão.')
-
-            if self.tipo_tarifa_at == 'Verde':
-                if self.demanda_contratada_unica is None:
-                    raise ValidationError('Demanda contratada única é obrigatória para tarifa verde.')
-
-            if self.tipo_tarifa_at == 'Azul':
-                if self.demanda_contratada_ponta is None or self.demanda_contratada_fora_ponta is None:
-                    raise ValidationError('Demanda contratada ponta e fora ponta são obrigatórias para tarifa azul.')
-
     def __str__(self):
         return f"Conta de Energia - {self.cliente.nome} - {self.mes.strftime('%m/%Y')}"
+
 
 class ItemFatura(models.Model):
     conta_energia = models.ForeignKey(ContaEnergia, on_delete=models.CASCADE, related_name='itens_fatura')
