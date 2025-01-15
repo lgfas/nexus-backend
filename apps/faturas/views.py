@@ -10,7 +10,7 @@ from rest_framework.views import APIView
 from .models import ContaEnergia, ItemFatura, Tributo
 from .serializers import ContaEnergiaSerializer, ItemFaturaSerializer, TributoSerializer
 from .services import analisar_consumo
-from .utils import extract_itens_fatura, extract_historico_data
+from .utils import extract_itens_fatura, extract_historico_data, extract_tributos
 from ..clientes.models import Cliente
 from ..historicos.models import HistoricoConsumoDemanda
 
