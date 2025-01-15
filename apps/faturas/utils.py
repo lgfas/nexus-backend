@@ -147,39 +147,3 @@ def extract_tributos(pdf_path):
 
     except Exception as e:
         raise ValueError(f"Erro ao extrair tributos: {e}")
-
-def calcular_tarifa_verde(consumo_ponta, consumo_fora_ponta, tarifa_verde, tributos=0):
-    custo_energia = (consumo_ponta + consumo_fora_ponta) * (tarifa_verde.valor_te + tarifa_verde.valor_tusd)
-    custo_total = custo_energia + tributos
-    return custo_total
-
-def calcular_tarifa_azul(consumo_ponta, consumo_fora_ponta, demanda_ponta, demanda_fora_ponta, tarifa_azul, tributos=0):
-    custo_energia = (consumo_ponta * tarifa_azul.valor_te) + (consumo_fora_ponta * tarifa_azul.valor_tusd)
-    custo_demanda = (demanda_ponta + demanda_fora_ponta) * tarifa_azul.valor_tusd
-    custo_total = custo_energia + custo_demanda + tributos
-    return custo_total
-
-
-def comparar_tarifas(consumo, demanda, tarifas, tributos):
-    custo_verde = calcular_tarifa_verde(
-        consumo_ponta=consumo["ponta"],
-        consumo_fora_ponta=consumo["fora_ponta"],
-        tarifa_verde=tarifas["verde"],
-        tributos=tributos
-    )
-    custo_azul = calcular_tarifa_azul(
-        consumo_ponta=consumo["ponta"],
-        consumo_fora_ponta=consumo["fora_ponta"],
-        demanda_ponta=demanda["ponta"],
-        demanda_fora_ponta=demanda["fora_ponta"],
-        tarifa_ponta=tarifas["azul"]["energia_ponta"],
-        tarifa_fora_ponta=tarifas["azul"]["energia_fora_ponta"],
-        tarifa_demanda_ponta=tarifas["azul"]["demanda_ponta"],
-        tarifa_demanda_fora_ponta=tarifas["azul"]["demanda_fora_ponta"],
-        tributos=tributos
-    )
-    return {
-        "melhor_opcao": "Verde" if custo_verde < custo_azul else "Azul",
-        "custo_verde": custo_verde,
-        "custo_azul": custo_azul
-    }

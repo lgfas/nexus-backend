@@ -9,7 +9,6 @@ from rest_framework.views import APIView
 
 from .models import ContaEnergia, ItemFatura, Tributo
 from .serializers import ContaEnergiaSerializer, ItemFaturaSerializer, TributoSerializer
-from .services import analisar_consumo
 from .utils import extract_itens_fatura, extract_historico_data, extract_tributos
 from ..clientes.models import Cliente
 from ..historicos.models import HistoricoConsumoDemanda
@@ -108,19 +107,4 @@ class UploadFaturaAPIView(APIView):
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-
-class AnaliseConsumoAPIView(APIView):
-    def get(self, request, pk):
-        try:
-            conta = ContaEnergia.objects.get(pk=pk)
-            resultado = analisar_consumo(conta)
-            return Response(resultado, status=status.HTTP_200_OK)
-        except ContaEnergia.DoesNotExist:
-            return Response({"detail": "Conta de energia não encontrada."}, status=status.HTTP_404_NOT_FOUND)
-        except ValueError as ve:
-            return Response({"detail": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({"detail": f"Erro inesperado: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 

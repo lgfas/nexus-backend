@@ -1,97 +1,86 @@
+from decimal import Decimal
+from django.db.models import Q
+
+from apps.faturas.models import ItemFatura, Tributo
 from apps.tarifas.models import Tarifa
 
 
-def analisar_consumo(conta):
+def calcular_consumo_azul(conta_energia, modalidade="Azul"):
     """
-    Analisa o consumo da conta de energia e determina se é mais vantajoso
-    permanecer na modalidade atual (Verde) ou migrar para Azul.
+    Calcula o consumo azul (consumo ponta e fora ponta) com base na conta de energia.
     """
-    # Buscar tarifas mais recentes com base no mês da conta
-    tarifas_verdes = Tarifa.objects.filter(
-        distribuidora=conta.distribuidora,
-        modalidade_tarifaria="Verde",
-        subgrupo=conta.subgrupo,
-        tipo_tarifa="Tarifa de Aplicação",
-        data_inicio_vigencia__lte=conta.mes
-    ).order_by('-data_inicio_vigencia')
+    try:
+        # Inicializa valores de consumo
+        consumo_ponta_azul = Decimal(0)
+        consumo_fora_ponta_azul = Decimal(0)
 
-    tarifas_azuis = Tarifa.objects.filter(
-        distribuidora=conta.distribuidora,
-        modalidade_tarifaria="Azul",
-        subgrupo=conta.subgrupo,
-        tipo_tarifa="Tarifa de Aplicação",
-        data_inicio_vigencia__lte=conta.mes
-    ).order_by('-data_inicio_vigencia')
+        # Filtrar itens de fatura relacionados ao consumo ponta e fora ponta
+        itens_fatura_ponta = ItemFatura.objects.filter(
+            conta_energia=conta_energia,
+            descricao__icontains="Consumo Ponta"
+        )
 
-    tarifa_verde = tarifas_verdes.first()
-    tarifa_azul = tarifas_azuis.first()
+        itens_fatura_fora_ponta = ItemFatura.objects.filter(
+            conta_energia=conta_energia,
+            descricao__icontains="Consumo Fora Ponta"
+        )
 
-    if not tarifa_verde or not tarifa_azul:
-        raise ValueError("Tarifas Verde e/ou Azul não encontradas para esta distribuidora e subgrupo.")
+        def calcular_consumo(itens_fatura, posto_tarifario):
+            consumo_total = Decimal(0)
 
-    # Calculando o preço unitário das tarifas
-    pis_cofins = conta.tributos.filter(tipo="PIS").first().aliquota + conta.tributos.filter(tipo="COFINS").first().aliquota
-    icms = conta.tributos.filter(tipo="ICMS").first().aliquota
+            for item in itens_fatura:
+                # Recuperar a tarifa correspondente
+                tarifa = Tarifa.objects.filter(
+                    distribuidora=conta_energia.distribuidora,
+                    modalidade=modalidade,
+                    subgrupo=conta_energia.subgrupo,
+                    tipo_tarifa="Tarifa de Aplicação",
+                    nom_posto_tarifario=posto_tarifario,
+                    data_inicio_vigencia__lte=conta_energia.data_vencimento
+                ).order_by("-data_inicio_vigencia").first()
 
-    def calcular_preco_unitario(tarifa):
-        return tarifa / (1 - pis_cofins) / (1 - icms)
+                if not tarifa:
+                    raise ValueError(f"Tarifa não encontrada para o posto tarifário {posto_tarifario}.")
 
-    preco_unitario_verde = calcular_preco_unitario(tarifa_verde.valor_tusd + tarifa_verde.valor_te)
-    preco_unitario_azul = calcular_preco_unitario(tarifa_azul.valor_tusd + tarifa_azul.valor_te)
+                # Calcular tarifa base (TUSD + TE)
+                tarifa_base = tarifa.valor_tusd + tarifa.valor_te
 
-    # Calculando consumo (Ponta e Fora Ponta)
-    consumo_ponta = conta.itens_fatura.filter(descricao="Consumo Ponta (kWh)").first()
-    consumo_fora_ponta = conta.itens_fatura.filter(descricao="Consumo Fora Ponta (kWh)").first()
+                # Recuperar alíquotas de tributos
+                tributos = Tributo.objects.filter(conta_energia=conta_energia)
+                pis = tributos.filter(tipo="PIS").first()
+                cofins = tributos.filter(tipo="CONFINS").first()
+                icms = tributos.filter(tipo="ICMS").first()
 
-    valor_consumo_verde = (
-        consumo_ponta.quantidade * preco_unitario_verde +
-        consumo_fora_ponta.quantidade * preco_unitario_verde
-    )
-    valor_consumo_azul = (
-        consumo_ponta.quantidade * preco_unitario_azul +
-        consumo_fora_ponta.quantidade * preco_unitario_azul
-    )
+                if not pis or not cofins or not icms:
+                    raise ValueError("Tributos PIS, CONFINS ou ICMS não encontrados para a conta de energia.")
 
-    # Calculando demanda
-    demanda_ativa = conta.itens_fatura.filter(descricao="Demanda Ativa (kW)").first()
-    demanda_contratada = conta.demanda_contratada_unica
-    demanda_excedente_verde = max(0, demanda_ativa.quantidade - demanda_contratada) * 2 * tarifa_verde.valor_te
+                # Calcular preço unitário
+                preco_unitario = tarifa_base / (
+                    (1 - Decimal(pis.aliquota / 100))
+                    * (1 - Decimal(cofins.aliquota / 100))
+                    * (1 - Decimal(icms.aliquota / 100))
+                )
 
-    if demanda_contratada:
-        demanda_ponta = conta.itens_fatura.filter(descricao="Demanda Ativa Isenta de ICMS (kW)").first()
-        excedente_ponta = max(0, demanda_ponta.quantidade - demanda_contratada) * 2 * tarifa_azul.valor_te
+                # Calcular consumo
+                quantidade = Decimal(item.quantidade or 0)
+                consumo = quantidade * preco_unitario
+                consumo_total += consumo
 
-        demanda_fora_ponta = consumo_fora_ponta.quantidade
-        excedente_fora_ponta = max(0, demanda_fora_ponta - demanda_contratada) * 2 * tarifa_azul.valor_tusd
+            return consumo_total
 
-        demanda_excedente_azul = excedente_ponta + excedente_fora_ponta
+        # Calcular consumo ponta
+        consumo_ponta_azul = calcular_consumo(itens_fatura_ponta, posto_tarifario="Ponta")
 
-    valor_demanda_verde = demanda_excedente_verde
-    valor_demanda_azul = demanda_excedente_azul
+        # Calcular consumo fora ponta
+        consumo_fora_ponta_azul = calcular_consumo(itens_fatura_fora_ponta, posto_tarifario="Fora ponta")
 
-    # Calculando o total
-    total_verde = valor_consumo_verde + valor_demanda_verde
-    total_azul = valor_consumo_azul + valor_demanda_azul
+        # Retornar consumo total
+        consumo_azul = consumo_ponta_azul + consumo_fora_ponta_azul
+        return {
+            "consumo_ponta_azul": consumo_ponta_azul,
+            "consumo_fora_ponta_azul": consumo_fora_ponta_azul,
+            "consumo_azul": consumo_azul,
+        }
 
-    # Comparando e retornando resultados
-    resultado = "Verde" if total_verde < total_azul else "Azul"
-
-    return {
-        "tarifa_verde": {
-            "valor_te": tarifa_verde.valor_te,
-            "valor_tusd": tarifa_verde.valor_tusd,
-            "preco_unitario": preco_unitario_verde,
-        },
-        "tarifa_azul": {
-            "valor_te": tarifa_azul.valor_te,
-            "valor_tusd": tarifa_azul.valor_tusd,
-            "preco_unitario": preco_unitario_azul,
-        },
-        "consumo_verde": valor_consumo_verde,
-        "consumo_azul": valor_consumo_azul,
-        "demanda_verde": valor_demanda_verde,
-        "demanda_azul": valor_demanda_azul,
-        "total_verde": total_verde,
-        "total_azul": total_azul,
-        "melhor_opcao": resultado,
-    }
+    except Exception as e:
+        raise ValueError(f"Erro ao calcular consumo azul: {e}")
