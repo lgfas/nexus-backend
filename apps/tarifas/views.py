@@ -32,7 +32,6 @@ class UploadTarifasCSVAPIView(APIView):
         except Exception as e:
             return Response({"error": f"Erro ao processar o arquivo: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-
 class AtualizarTarifasAPIView(APIView):
     """
     Atualiza tarifas via API pública da ANEEL.

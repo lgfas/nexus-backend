@@ -1,5 +1,6 @@
 import os
 import tempfile
+
 import chardet  # Para detectar a codificação
 from rest_framework import status, viewsets
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -9,7 +10,7 @@ from rest_framework.views import APIView
 from .models import ContaEnergia, ItemFatura, Tributo
 from .serializers import ContaEnergiaSerializer, ItemFaturaSerializer, TributoSerializer
 from .services import analisar_consumo
-from .utils import extract_itens_fatura, extract_historico_data, extract_tributos
+from .utils import extract_itens_fatura, extract_historico_data
 from ..clientes.models import Cliente
 from ..historicos.models import HistoricoConsumoDemanda
 
@@ -111,18 +112,9 @@ class UploadFaturaAPIView(APIView):
 
 class AnaliseConsumoAPIView(APIView):
     def get(self, request, pk):
-        tipo_tarifa_desejado = request.query_params.get('tipo_tarifa', 'Tarifa de Aplicação')  # Padrão: 'Tarifa de Aplicação'
-
-        # Validar o tipo de tarifa fornecido
-        if tipo_tarifa_desejado not in ['Tarifa de Aplicação', 'Base Econômica']:
-            return Response(
-                {"detail": f"Tipo de tarifa inválido: {tipo_tarifa_desejado}. Escolha entre 'Tarifa de Aplicação' ou 'Base Econômica'."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         try:
             conta = ContaEnergia.objects.get(pk=pk)
-            resultado = analisar_consumo(conta, tipo_tarifa_desejado=tipo_tarifa_desejado)
+            resultado = analisar_consumo(conta)
             return Response(resultado, status=status.HTTP_200_OK)
         except ContaEnergia.DoesNotExist:
             return Response({"detail": "Conta de energia não encontrada."}, status=status.HTTP_404_NOT_FOUND)

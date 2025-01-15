@@ -10,31 +10,27 @@ from .models import Distribuidora, Tarifa
 
 def processar_tarifas_csv(file):
     """
-    Processa um arquivo CSV contendo tarifas elétricas, com suporte para arquivos locais e dados baixados de URLs públicas.
+    Processa um arquivo CSV contendo tarifas elétricas, otimizando para grandes arquivos.
     """
     # Ler o CSV
-    df = pd.read_csv(file, delimiter=',', encoding='utf-8')
+    try:
+        df = pd.read_csv(file, delimiter=',', encoding='utf-8')
+    except Exception as e:
+        raise Exception(f"Erro ao ler o arquivo CSV: {str(e)}")
 
     # Função para conversão segura de valores decimais
     def safe_decimal(value, column_name, index):
         try:
-            # Substituir vírgulas por pontos e remover espaços extras
             value = str(value).replace(',', '.').strip()
-
-            # Tratar valores vazios ou inválidos como 0.00
             if not value or value in ['.', ',', '']:
                 return Decimal('0.00')
-
-            # Converter para Decimal
             return Decimal(value)
         except (InvalidOperation, ValueError) as e:
             raise Exception(f"Erro ao converter '{value}' na coluna '{column_name}' (Linha {index + 1}): {e}")
 
-    # Processar por blocos para otimizar
+    # Processar por blocos para lidar com arquivos grandes
     block_size = 10000
     total_rows = len(df)
-
-    # Lista para armazenar possíveis erros
     erros = []
 
     for start in range(0, total_rows, block_size):
@@ -50,11 +46,11 @@ def processar_tarifas_csv(file):
                         codigo=str(row['NumCNPJDistribuidora']),
                         defaults={
                             'nome': str(row['SigAgente']),
-                            'estado': str(row['SigAgenteAcessante'])
+                            'estado': str(row.get('SigAgenteAcessante', ''))[:2]  # Limitar a 2 caracteres
                         }
                     )
 
-                    # Checar duplicatas antes de inserir
+                    # Verificar se a tarifa já existe
                     exists = Tarifa.objects.filter(
                         distribuidora=distribuidora,
                         data_inicio_vigencia=pd.to_datetime(row['DatInicioVigencia']),
@@ -64,23 +60,29 @@ def processar_tarifas_csv(file):
                     ).exists()
 
                     if not exists:
+                        # Inserir nova tarifa
                         Tarifa.objects.create(
                             distribuidora=distribuidora,
                             data_inicio_vigencia=pd.to_datetime(row['DatInicioVigencia']),
-                            data_fim_vigencia=pd.to_datetime(row['DatFimVigencia']) if pd.notna(
-                                row['DatFimVigencia']) else None,
+                            data_fim_vigencia=pd.to_datetime(row['DatFimVigencia']) if pd.notna(row['DatFimVigencia']) else None,
                             modalidade=row['DscModalidadeTarifaria'],
                             subgrupo=row['DscSubGrupo'],
                             tipo_tarifa=row['DscBaseTarifaria'],
+                            valor_tusd=safe_decimal(row['VlrTUSD'], 'VlrTUSD', index),
                             valor_te=safe_decimal(row['VlrTE'], 'VlrTE', index),
-                            valor_tusd=safe_decimal(row['VlrTUSD'], 'VlrTUSD', index)
+                            dsc_reh=row.get('DscREH'),
+                            dsc_classe=row.get('DscClasse'),
+                            dsc_subclasse=row.get('DscSubClasse'),
+                            dsc_detalhe=row.get('DscDetalhe'),
+                            nom_posto_tarifario=row.get('NomPostoTarifario'),
+                            dsc_unidade_terciaria=row.get('DscUnidadeTerciaria')
                         )
                 except Exception as e:
                     # Registrar erro
                     erros.append(f"Erro na linha {index + 1}: {e}")
                     continue  # Ignorar linha problemática
 
-    # Retornar status do processamento
+    # Retornar status final
     if erros:
         return {"status": "concluído com erros", "detalhes": erros[:10]}  # Limitar erros exibidos
     return {"status": "concluído"}
@@ -127,5 +129,4 @@ def processar_tarifas_api(base_url, resource_id):
         return {"status": "concluído"}
     except Exception as e:
         raise Exception(f"Erro ao processar dados da API: {e}")
-
 

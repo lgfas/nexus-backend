@@ -6,10 +6,20 @@ from .models import ContaEnergia, ItemFatura, Tributo
 @admin.register(ContaEnergia)
 class ContaEnergiaAdmin(admin.ModelAdmin):
     list_display = (
-        'cliente', 'distribuidora', 'mes', 'vencimento', 'total_pagar',
-        'leitura_anterior', 'leitura_atual', 'proxima_leitura',
-        'subgrupo', 'modalidade', 'demanda_contratada_unica', 'demanda_contratada_ponta',
-        'demanda_contratada_fora_ponta', 'fator_potencia',
+        'cliente',
+        'distribuidora',
+        'mes',
+        'vencimento',
+        'total_pagar',
+        'leitura_anterior',
+        'leitura_atual',
+        'proxima_leitura',
+        'subgrupo',
+        'modalidade',
+        'demanda_contratada_unica',
+        'demanda_contratada_ponta',
+        'demanda_contratada_fora_ponta',
+        'fator_potencia',
     )
     search_fields = ('cliente__nome', 'mes', 'vencimento', 'subgrupo')
     list_filter = ('subgrupo', 'modalidade')
