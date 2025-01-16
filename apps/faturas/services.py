@@ -59,15 +59,114 @@ def buscar_tarifa_api(distribuidora, modalidade, subgrupo, tipo_tarifa, posto_ta
     }
 
 
+def calcular_consumo(conta_energia, modalidade, itens_fatura, posto_tarifario):
+    consumo_total = Decimal(0)
 
-def calcular_consumo_azul_api(conta_energia, modalidade="Azul"):
+    for item in itens_fatura:
+        tarifa = buscar_tarifa_api(
+            distribuidora=conta_energia.distribuidora.nome,
+            modalidade=modalidade,
+            subgrupo=conta_energia.subgrupo,
+            tipo_tarifa="Tarifa de Aplicação",
+            posto_tarifario=posto_tarifario,
+            data_vencimento=conta_energia.vencimento,
+            unidade="MWh"  # Unidade ajustada para API
+        )
+
+        print(f"Tarifa Base Calculada: TUSD={tarifa['valor_tusd']}, TE={tarifa['valor_te']}")
+
+        if not tarifa:
+            print(f"Tarifa não encontrada para {posto_tarifario}.")
+            continue
+
+        tarifa_base = ((tarifa["valor_tusd"]) / 1000) + ((tarifa["valor_te"]) / 1000)
+        print(f"Tarifa Base Calculada: {tarifa_base}")
+
+        tributos = Tributo.objects.filter(conta_energia=conta_energia)
+        pis = tributos.filter(tipo="PIS").first()
+        cofins = tributos.filter(tipo="COFINS").first()
+        icms = tributos.filter(tipo="ICMS").first()
+
+        if not pis or not cofins or not icms:
+            print("Tributos PIS, COFINS ou ICMS não encontrados.")
+            continue
+
+        preco_unitario = (tarifa_base /
+                          (1 - Decimal(pis.aliquota / 100) - Decimal(cofins.aliquota / 100)) /
+                          (1 - Decimal(icms.aliquota / 100))
+                          )
+        print(f"Preço unitário calculado: {preco_unitario}")
+
+        quantidade = Decimal(item.quantidade or 0)
+        print(f"Quantidade: {quantidade}")
+        consumo = quantidade * preco_unitario
+        print(f"Consumo para item {item.descricao}: {consumo}\n")
+
+        consumo_total += consumo
+
+    return consumo_total
+
+
+def calcular_demanda(conta_energia, modalidade, itens_fatura, posto_tarifario):
+    demanda_total = Decimal(0)
+    preco_unitario_local = Decimal(0)
+
+    for item in itens_fatura:
+        # Buscar tarifa na API (unidade kW)
+        tarifa = buscar_tarifa_api(
+            distribuidora=conta_energia.distribuidora.nome,
+            modalidade=modalidade,
+            subgrupo=conta_energia.subgrupo,
+            tipo_tarifa="Tarifa de Aplicação",
+            posto_tarifario=posto_tarifario,
+            data_vencimento=conta_energia.vencimento,
+            unidade="kW"  # Unidade ajustada para demanda
+        )
+
+        if not tarifa:
+            print(f"Tarifa não encontrada para {posto_tarifario}.")
+            continue
+
+        print(f"Tarifa Base Calculada: TUSD={tarifa['valor_tusd']}, TE={tarifa['valor_te']}")
+
+        # Calcular tarifa base (TUSD + TE)
+        tarifa_base = tarifa["valor_tusd"] + tarifa["valor_te"]
+        print(f"Tarifa Base Calculada: {tarifa_base}")
+
+        tributos = Tributo.objects.filter(conta_energia=conta_energia)
+        pis = tributos.filter(tipo="PIS").first()
+        cofins = tributos.filter(tipo="COFINS").first()
+        icms = tributos.filter(tipo="ICMS").first()
+
+        if not pis or not cofins or not icms:
+            print("Tributos PIS, COFINS ou ICMS não encontrados.")
+            continue
+
+        # Calcular preço unitário
+        preco_unitario_local = tarifa_base / (
+                (1 - Decimal(pis.aliquota / 100) - Decimal(cofins.aliquota / 100)) /
+                (1 - Decimal(icms.aliquota / 100))
+        )
+
+        print(f"Preço unitário calculado: {preco_unitario_local}")
+
+        # Calcular demanda
+        quantidade = Decimal(item.quantidade or 0)
+        demanda = quantidade * preco_unitario_local
+        print(f"Demanda para item {item.descricao}: {demanda}\n")
+
+        demanda_total += demanda
+
+    return demanda_total, preco_unitario_local, quantidade
+
+def calcular_consumo_api(conta_energia, modalidade_analise):
     """
-    Calcula o consumo azul (consumo ponta e fora ponta) com base na conta de energia,
+    Calcula o consumo (consumo ponta e fora ponta) com base na conta de energia e na sua modalidade,
     utilizando a API da ANEEL para buscar tarifas.
     """
     try:
-        consumo_ponta_azul = Decimal(0)
-        consumo_fora_ponta_azul = Decimal(0)
+        consumo_ponta = Decimal(0)
+        consumo_fora_ponta = Decimal(0)
 
         itens_fatura_ponta = ItemFatura.objects.filter(
             conta_energia=conta_energia, descricao__icontains="Consumo Ponta"
@@ -77,68 +176,20 @@ def calcular_consumo_azul_api(conta_energia, modalidade="Azul"):
             conta_energia=conta_energia, descricao__icontains="Consumo Fora Ponta"
         )
 
-        def calcular_consumo(itens_fatura, posto_tarifario):
-            consumo_total = Decimal(0)
-
-            for item in itens_fatura:
-                tarifa = buscar_tarifa_api(
-                    distribuidora=conta_energia.distribuidora.nome,
-                    modalidade=modalidade,
-                    subgrupo=conta_energia.subgrupo,
-                    tipo_tarifa="Tarifa de Aplicação",
-                    posto_tarifario=posto_tarifario,
-                    data_vencimento=conta_energia.vencimento,
-                    unidade="MWh"  # Unidade ajustada para API
-                )
-
-                print(f"Tarifa Base Calculada: TUSD={tarifa['valor_tusd']}, TE={tarifa['valor_te']}")
-
-                if not tarifa:
-                    print(f"Tarifa não encontrada para {posto_tarifario}.")
-                    continue
-
-                tarifa_base = ((tarifa["valor_tusd"]) / 1000) + ((tarifa["valor_te"]) / 1000)
-                print(f"Tarifa Base Calculada: {tarifa_base}")
-
-                tributos = Tributo.objects.filter(conta_energia=conta_energia)
-                pis = tributos.filter(tipo="PIS").first()
-                cofins = tributos.filter(tipo="COFINS").first()
-                icms = tributos.filter(tipo="ICMS").first()
-
-                if not pis or not cofins or not icms:
-                    print("Tributos PIS, COFINS ou ICMS não encontrados.")
-                    continue
-
-                preco_unitario = (tarifa_base /
-                                  (1 - Decimal(pis.aliquota / 100) - Decimal(cofins.aliquota / 100)) /
-                                  (1 - Decimal(icms.aliquota / 100))
-                )
-                print(f"Preço unitário calculado: {preco_unitario}")
-
-                quantidade = Decimal(item.quantidade or 0)
-                print(f"Quantidade: {quantidade}")
-                consumo = quantidade * preco_unitario
-                print(f"Consumo para item {item.descricao}: {consumo}\n")
-
-                consumo_total += consumo
-
-            return consumo_total
-
-        consumo_ponta_azul = calcular_consumo(itens_fatura_ponta, posto_tarifario="Ponta")
-        consumo_fora_ponta_azul = calcular_consumo(itens_fatura_fora_ponta, posto_tarifario="Fora ponta")
-        consumo_azul = consumo_ponta_azul + consumo_fora_ponta_azul
+        consumo_ponta = calcular_consumo(conta_energia, modalidade_analise, itens_fatura_ponta, posto_tarifario="Ponta")
+        consumo_fora_ponta = calcular_consumo(conta_energia, modalidade_analise, itens_fatura_fora_ponta, posto_tarifario="Fora ponta")
+        consumo = consumo_ponta + consumo_fora_ponta
 
         return {
-            "consumo_ponta_azul": consumo_ponta_azul,
-            "consumo_fora_ponta_azul": consumo_fora_ponta_azul,
-            "consumo_azul": consumo_azul,
+            "consumo_ponta": consumo_ponta,
+            "consumo_foral": consumo_fora_ponta,
+            "consumo": consumo,
         }
 
     except Exception as e:
         raise ValueError(f"Erro ao calcular consumo azul: {e}")
 
-
-def calcular_demanda_azul_api(conta_energia, modalidade="Azul"):
+def calcular_demanda_azul_api(conta_energia):
     """
     Calcula a demanda azul (demanda ponta, fora ponta e excedente) com base na conta de energia,
     utilizando a API da ANEEL para buscar tarifas.
@@ -153,6 +204,7 @@ def calcular_demanda_azul_api(conta_energia, modalidade="Azul"):
         preco_unitario_fora_ponta = Decimal(0)
         quantidade_demanda_ponta = Decimal(0)
         quantidade_demanda_fora_ponta = Decimal(0)
+        modalidade = "Azul"
 
         # Filtrar itens de fatura relacionados à demanda ponta e fora ponta
         itens_fatura_ponta = ItemFatura.objects.filter(
@@ -164,64 +216,12 @@ def calcular_demanda_azul_api(conta_energia, modalidade="Azul"):
         )
 
         # Função para calcular demanda
-        def calcular_demanda(itens_fatura, posto_tarifario):
-            demanda_total = Decimal(0)
-            preco_unitario_local = Decimal(0)
-
-            for item in itens_fatura:
-                # Buscar tarifa na API (unidade kW)
-                tarifa = buscar_tarifa_api(
-                    distribuidora=conta_energia.distribuidora.nome,
-                    modalidade=modalidade,
-                    subgrupo=conta_energia.subgrupo,
-                    tipo_tarifa="Tarifa de Aplicação",
-                    posto_tarifario=posto_tarifario,
-                    data_vencimento=conta_energia.vencimento,
-                    unidade="kW"  # Unidade ajustada para demanda
-                )
-
-                if not tarifa:
-                    print(f"Tarifa não encontrada para {posto_tarifario}.")
-                    continue
-
-                print(f"Tarifa Base Calculada: TUSD={tarifa['valor_tusd']}, TE={tarifa['valor_te']}")
-
-                # Calcular tarifa base (TUSD + TE)
-                tarifa_base = tarifa["valor_tusd"] + tarifa["valor_te"]
-                print(f"Tarifa Base Calculada: {tarifa_base}")
-
-                # Recuperar tributos
-                tributos = Tributo.objects.filter(conta_energia=conta_energia)
-                pis = tributos.filter(tipo="PIS").first()
-                cofins = tributos.filter(tipo="COFINS").first()
-                icms = tributos.filter(tipo="ICMS").first()
-
-                if not pis or not cofins or not icms:
-                    print("Tributos PIS, COFINS ou ICMS não encontrados.")
-                    continue
-
-                # Calcular preço unitário
-                preco_unitario_local = tarifa_base / (
-                    (1 - Decimal(pis.aliquota / 100) - Decimal(cofins.aliquota / 100)) /
-                    (1 - Decimal(icms.aliquota / 100))
-                )
-
-                print(f"Preço unitário calculado: {preco_unitario_local}")
-
-                # Calcular demanda
-                quantidade = Decimal(item.quantidade or 0)
-                demanda = quantidade * preco_unitario_local
-                print(f"Demanda para item {item.descricao}: {demanda}\n")
-
-                demanda_total += demanda
-
-            return demanda_total, preco_unitario_local, quantidade
 
         # Calcular demanda ponta
-        demanda_ponta_azul, preco_unitario_ponta, quantidade_demanda_ponta = calcular_demanda(itens_fatura_ponta, posto_tarifario="Ponta")
+        demanda_ponta_azul, preco_unitario_ponta, quantidade_demanda_ponta = calcular_demanda(conta_energia, modalidade, itens_fatura_ponta, posto_tarifario="Ponta")
 
         # Calcular demanda fora ponta
-        demanda_fora_ponta_azul, preco_unitario_fora_ponta, quantidade_demanda_fora_ponta = calcular_demanda(itens_fatura_fora_ponta, posto_tarifario="Fora ponta")
+        demanda_fora_ponta_azul, preco_unitario_fora_ponta, quantidade_demanda_fora_ponta = calcular_demanda(conta_energia, modalidade, itens_fatura_fora_ponta, posto_tarifario="Fora ponta")
 
         print(f"\nPreço unitário Ponta: {preco_unitario_ponta}")
         print(f"Preço unitário Fora Ponta: {preco_unitario_fora_ponta}")
@@ -256,20 +256,87 @@ def calcular_demanda_azul_api(conta_energia, modalidade="Azul"):
     except Exception as e:
         raise ValueError(f"Erro ao calcular demanda azul: {e}")
 
+def calcular_demanda_verde_api(conta_energia):
+    """
+    Calcula a demanda verde (demanda ativa, e demanda ultrapassagem) com base na conta de energia,
+    utilizando a API da ANEEL para buscar tarifas.
+    """
+    try:
+        # Inicializar valores
+        demanda_ativa = Decimal(0)
+        demanda_ultrapassagem = Decimal(0)
+        preco_unitario_demanda_ativa= Decimal(0)
+        quantidade_demanda_ativa = Decimal(0)
+        modalidade = "Verde"
 
-def calcular_valor_total_azul(conta_energia, modalidade="Azul"):
+        # Filtrar itens de fatura relacionados à demanda ponta e fora ponta
+        itens_fatura_ponta = ItemFatura.objects.filter(
+            conta_energia=conta_energia, descricao__icontains="Demanda Ativa"
+        )
+
+        itens_fatura_fora_ponta = ItemFatura.objects.filter(
+            conta_energia=conta_energia, descricao__icontains="Demanda Ultrapassagem"
+        )
+
+        # Função para calcular demanda
+
+        # Calcular demanda ponta
+        demanda_ativa, preco_unitario_demanda_ativa, quantidade_demanda_ativa = calcular_demanda(conta_energia, modalidade, itens_fatura_ponta, posto_tarifario="Não se aplica")
+
+        print(f"\nPreço unitário Demanda Ativa: {preco_unitario_demanda_ativa}")
+        print(f"Demanda Contratada Única: {conta_energia.demanda_contratada_unica}\n")
+
+        # Calcular demanda ultrapassagem
+        if quantidade_demanda_ativa > conta_energia.demanda_contratada_unica:
+            demanda_ultrapassagem = (quantidade_demanda_ativa - Decimal(conta_energia.demanda_contratada_unica)) * 2 * preco_unitario_demanda_ativa
+        else:
+            demanda_ultrapassagem = Decimal(0)
+
+        print(f"\nDemanda Ativa: {demanda_ativa}")
+        print(f"Demanda de Ultrapassagem: {demanda_ultrapassagem}\n")
+
+        # Calcular demanda total
+        demanda_verde = demanda_ativa + demanda_ultrapassagem
+
+        return {
+            "demanda_ativa": demanda_ativa,
+            "demanda_ultrapassagem": demanda_ultrapassagem,
+            "demanda_verde": demanda_verde,
+        }
+
+    except Exception as e:
+        raise ValueError(f"Erro ao calcular demanda azul: {e}")
+
+def calcular_valor_total(conta_energia):
     """
     Calcula o valor total azul considerando o consumo, demanda e os itens de fatura
     que não foram processados anteriormente para consumo e demanda.
     """
     try:
-        # Calcular consumo azul
-        consumo_data = calcular_consumo_azul_api(conta_energia, modalidade)
-        consumo_azul = consumo_data["consumo_azul"]
 
-        # Calcular demanda azul
-        demanda_data = calcular_demanda_azul_api(conta_energia, modalidade)
-        demanda_azul = demanda_data["demanda_azul"]
+        consumo = Decimal(0)
+        demanda = Decimal(0)
+        modalidade_analise = ''
+
+        if conta_energia.modalidade == "Verde":
+            # Calcular consumo azul
+            modalidade_analise = "Azul"
+            consumo_data = calcular_consumo_api(conta_energia,modalidade_analise)
+            consumo = consumo_data["consumo"]
+
+            # Calcular demanda azul
+            demanda_data = calcular_demanda_azul_api(conta_energia)
+            demanda = demanda_data["demanda_azul"]
+
+        if conta_energia.modalidade == "Azul":
+            # Calcular consumo verde
+            modalidade_analise = "Verde"
+            consumo_data = calcular_consumo_api(conta_energia,modalidade_analise)
+            consumo = consumo_data["consumo"]
+
+            # Calcular demanda verde
+            demanda_data = calcular_demanda_verde_api(conta_energia)
+            demanda = demanda_data["demanda_verde"]
 
         # Descrições utilizadas no cálculo de consumo e demanda
         descricoes_utilizadas = [
@@ -290,19 +357,19 @@ def calcular_valor_total_azul(conta_energia, modalidade="Azul"):
         valor_itens_restantes = sum(Decimal(item.valor or 0) for item in itens_restantes)
 
         # Calcular valor total azul
-        valor_total_azul = consumo_azul + demanda_azul + valor_itens_restantes
+        valor_total_calculado = consumo + demanda + valor_itens_restantes
 
-        print(f"\nConsumo Azul: {consumo_azul}")
-        print(f"\nDemanda Azul: {demanda_azul}")
+        print(f"\nConsumo {modalidade_analise}: {consumo}")
+        print(f"\nDemanda {modalidade_analise}: {demanda}")
         print(f"\nValor Itens Restantes: {valor_itens_restantes}")
-        print(f"\nValor Total Azul: {valor_total_azul}")
+        print(f"\nValor Total {modalidade_analise}: {valor_total_calculado}")
 
         return {
-            "consumo_azul": consumo_azul,
-            "demanda_azul": demanda_azul,
+            "consumo": consumo,
+            "demanda": demanda,
             "valor_itens_restantes": valor_itens_restantes,
-            "valor_total_azul": valor_total_azul,
+            "valor_total_calculado": valor_total_calculado,
         }
 
     except Exception as e:
-        raise ValueError(f"Erro ao calcular valor total azul: {e}")
+        raise ValueError(f"Erro ao calcular valor total {modalidade_analise}: {e}")
