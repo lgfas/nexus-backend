@@ -15,7 +15,7 @@ def safe_decimal(value, default=Decimal(0)):
         return default
 
 
-def buscar_tarifa_api(distribuidora, modalidade, subgrupo, tipo_tarifa, posto_tarifario, data_vencimento):
+def buscar_tarifa_api(distribuidora, modalidade, subgrupo, tipo_tarifa, posto_tarifario, data_vencimento, unidade):
     """
     Consulta a API da ANEEL para buscar a tarifa mais recente com base nos filtros fornecidos.
     """
@@ -23,17 +23,18 @@ def buscar_tarifa_api(distribuidora, modalidade, subgrupo, tipo_tarifa, posto_ta
     resource_id = "fcf2906c-7c32-4b9b-a637-054e7a5234f4"
 
     sql_query = f"""
-        SELECT * 
-        FROM "{resource_id}"
-        WHERE "SigAgente" = '{distribuidora}'
-          AND "DscModalidadeTarifaria" = '{modalidade}'
-          AND "DscSubGrupo" = '{subgrupo}'
-          AND "DscBaseTarifaria" = '{tipo_tarifa}'
-          AND "NomPostoTarifario" = '{posto_tarifario}'
-          AND "DatInicioVigencia" <= '{data_vencimento}'
-        ORDER BY "DatInicioVigencia" DESC
-        LIMIT 1
-    """
+            SELECT * 
+            FROM "{resource_id}"
+            WHERE "SigAgente" = '{distribuidora}'
+              AND "DscModalidadeTarifaria" = '{modalidade}'
+              AND "DscSubGrupo" = '{subgrupo}'
+              AND "DscBaseTarifaria" = '{tipo_tarifa}'
+              AND "NomPostoTarifario" = '{posto_tarifario}'
+              AND "DscUnidadeTerciaria" = '{unidade}'
+              AND "DatInicioVigencia" <= '{data_vencimento}'
+            ORDER BY "DatInicioVigencia" DESC
+            LIMIT 1
+        """
 
     response = requests.get(base_url, params={"sql": sql_query})
     if response.status_code != 200:
@@ -43,7 +44,7 @@ def buscar_tarifa_api(distribuidora, modalidade, subgrupo, tipo_tarifa, posto_ta
     if not result:
         return None
 
-    tarifa = result[0]  # Pega o primeiro resultado (mais recente)
+    tarifa = result[0]
 
     # Função para tratar valores
     def tratar_valor(valor):
@@ -85,7 +86,8 @@ def calcular_consumo_azul_api(conta_energia, modalidade="Azul"):
                     subgrupo=conta_energia.subgrupo,
                     tipo_tarifa="Tarifa de Aplicação",
                     posto_tarifario=posto_tarifario,
-                    data_vencimento=conta_energia.vencimento
+                    data_vencimento=conta_energia.vencimento,
+                    unidade="MWh"  # Unidade ajustada para API
                 )
 
                 print(f"Tarifa Base Calculada: TUSD={tarifa['valor_tusd']}, TE={tarifa['valor_te']}")
