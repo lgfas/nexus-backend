@@ -112,6 +112,7 @@ def calcular_consumo_azul_api(conta_energia, modalidade="Azul"):
                 print(f"Preço unitário calculado: {preco_unitario}")
 
                 quantidade = Decimal(item.quantidade or 0)
+                print(f"Quantidade: {quantidade}")
                 consumo = quantidade * preco_unitario
                 print(f"Consumo para item {item.descricao}: {consumo}")
 
