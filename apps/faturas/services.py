@@ -98,6 +98,7 @@ def calcular_consumo_azul_api(conta_energia, modalidade="Azul"):
                     continue
 
                 tarifa_base = ((tarifa["valor_tusd"]) / 1000) + ((tarifa["valor_te"]) / 1000)
+                print(f"Tarifa Base Calculada: {tarifa_base}")
 
                 tributos = Tributo.objects.filter(conta_energia=conta_energia)
                 pis = tributos.filter(tipo="PIS").first()
@@ -117,7 +118,7 @@ def calcular_consumo_azul_api(conta_energia, modalidade="Azul"):
                 quantidade = Decimal(item.quantidade or 0)
                 print(f"Quantidade: {quantidade}")
                 consumo = quantidade * preco_unitario
-                print(f"Consumo para item {item.descricao}: {consumo}")
+                print(f"Consumo para item {item.descricao}: {consumo}\n")
 
                 consumo_total += consumo
 
@@ -187,6 +188,7 @@ def calcular_demanda_azul_api(conta_energia, modalidade="Azul"):
 
                 # Calcular tarifa base (TUSD + TE)
                 tarifa_base = tarifa["valor_tusd"] + tarifa["valor_te"]
+                print(f"Tarifa Base Calculada: {tarifa_base}")
 
                 # Recuperar tributos
                 tributos = Tributo.objects.filter(conta_energia=conta_energia)
@@ -209,7 +211,7 @@ def calcular_demanda_azul_api(conta_energia, modalidade="Azul"):
                 # Calcular demanda
                 quantidade = Decimal(item.quantidade or 0)
                 demanda = quantidade * preco_unitario_local
-                print(f"Demanda para item {item.descricao}: {demanda}")
+                print(f"Demanda para item {item.descricao}: {demanda}\n")
 
                 demanda_total += demanda
 
@@ -221,9 +223,9 @@ def calcular_demanda_azul_api(conta_energia, modalidade="Azul"):
         # Calcular demanda fora ponta
         demanda_fora_ponta_azul, preco_unitario_fora_ponta, quantidade_demanda_fora_ponta = calcular_demanda(itens_fatura_fora_ponta, posto_tarifario="Fora ponta")
 
-        print(f"Preço unitário Ponta: {preco_unitario_ponta}")
+        print(f"\nPreço unitário Ponta: {preco_unitario_ponta}")
         print(f"Preço unitário Fora Ponta: {preco_unitario_fora_ponta}")
-        print(f"Demanda Contratada Única: {conta_energia.demanda_contratada_unica}")
+        print(f"Demanda Contratada Única: {conta_energia.demanda_contratada_unica}\n")
 
         # Calcular excedente ponta
         if quantidade_demanda_ponta > conta_energia.demanda_contratada_unica:
@@ -237,8 +239,8 @@ def calcular_demanda_azul_api(conta_energia, modalidade="Azul"):
         else:
             excedente_fora_ponta = Decimal(0)
 
-        print(f"Excedente Ponta: {excedente_ponta}")
-        print(f"Excedente Fora Ponta: {excedente_fora_ponta}")
+        print(f"\nExcedente Ponta: {excedente_ponta}")
+        print(f"Excedente Fora Ponta: {excedente_fora_ponta}\n")
 
         # Calcular demanda total
         demanda_azul = demanda_ponta_azul + demanda_fora_ponta_azul + excedente_ponta + excedente_fora_ponta
@@ -255,3 +257,52 @@ def calcular_demanda_azul_api(conta_energia, modalidade="Azul"):
         raise ValueError(f"Erro ao calcular demanda azul: {e}")
 
 
+def calcular_valor_total_azul(conta_energia, modalidade="Azul"):
+    """
+    Calcula o valor total azul considerando o consumo, demanda e os itens de fatura
+    que não foram processados anteriormente para consumo e demanda.
+    """
+    try:
+        # Calcular consumo azul
+        consumo_data = calcular_consumo_azul_api(conta_energia, modalidade)
+        consumo_azul = consumo_data["consumo_azul"]
+
+        # Calcular demanda azul
+        demanda_data = calcular_demanda_azul_api(conta_energia, modalidade)
+        demanda_azul = demanda_data["demanda_azul"]
+
+        # Descrições utilizadas no cálculo de consumo e demanda
+        descricoes_utilizadas = [
+            "Consumo Ponta (kWh)",
+            "Consumo Fora Ponta (kWh)",
+            "Demanda Ponta",
+            "Demanda Fora Ponta",
+            "Demanda Ativa (kW)",
+            "Demanda Ultrapassagem (kW)"
+        ]
+
+        # Filtrar itens de fatura que não estão nas descrições utilizadas
+        itens_restantes = ItemFatura.objects.filter(conta_energia=conta_energia).exclude(
+            descricao__in=descricoes_utilizadas
+        )
+
+        # Somar os valores desses itens restantes
+        valor_itens_restantes = sum(Decimal(item.valor or 0) for item in itens_restantes)
+
+        # Calcular valor total azul
+        valor_total_azul = consumo_azul + demanda_azul + valor_itens_restantes
+
+        print(f"\nConsumo Azul: {consumo_azul}")
+        print(f"\nDemanda Azul: {demanda_azul}")
+        print(f"\nValor Itens Restantes: {valor_itens_restantes}")
+        print(f"\nValor Total Azul: {valor_total_azul}")
+
+        return {
+            "consumo_azul": consumo_azul,
+            "demanda_azul": demanda_azul,
+            "valor_itens_restantes": valor_itens_restantes,
+            "valor_total_azul": valor_total_azul,
+        }
+
+    except Exception as e:
+        raise ValueError(f"Erro ao calcular valor total azul: {e}")
