@@ -2,6 +2,7 @@ import os
 import pandas as pd
 from tabula import read_pdf
 import chardet
+from decimal import Decimal, InvalidOperation
 
 
 def limpar_numero(valor):
@@ -147,3 +148,83 @@ def extract_tributos(pdf_path):
 
     except Exception as e:
         raise ValueError(f"Erro ao extrair tributos: {e}")
+
+
+def tratar_tabela_itens(tabela, index):
+    """
+    Ajusta a tabela de itens para garantir que todas as colunas estejam devidamente preenchidas.
+    """
+    # Remover linhas irrelevantes
+    tabela = tabela.drop([0, 1]).reset_index(drop=True)
+
+    # Selecionar apenas as primeiras 7 colunas
+    tabela = tabela.iloc[:, :7]
+    tabela.columns = [
+        "Itens de Fatura", "Quant.", "Preço Unit.(R$)", "Tarifa", "PIS/", "ICMS", "Valor(R$)"
+    ]
+
+    # Remover linhas onde "Itens de Fatura" está vazio
+    tabela = tabela.dropna(subset=["Itens de Fatura"]).reset_index(drop=True)
+
+    # Ajustar desalinhamentos específicos
+    for i, row in tabela.iterrows():
+        # Verificar desalinhamento em "Preço Unit.(R$)" e corrigir se necessário
+        if pd.isnull(row["Preço Unit.(R$)"]) and not pd.isnull(row["Tarifa"]):
+            tabela.loc[i, "Preço Unit.(R$)"] = row["Tarifa"]
+            tabela.loc[i, "Tarifa"] = row["PIS/"]
+            tabela.loc[i, "PIS/"] = row["ICMS"]
+            tabela.loc[i, "ICMS"] = row["Valor(R$)"]
+            tabela.loc[i, "Valor(R$)"] = None
+
+    return tabela
+
+
+def identificar_tabela(tabelas):
+    """
+    Identifica a tabela correta de itens com base no conteúdo.
+    """
+    for idx, tabela in enumerate(tabelas):
+        # Procurar por indicadores de que a tabela contém itens de fatura
+        if any(tabela[0].str.contains("Consumo Ponta", na=False, regex=True)):
+            return tabela, idx
+    raise ValueError("Tabela de itens de fatura não encontrada no PDF.")
+
+
+def extract_itens_fatura_generalizado(pdf_path):
+    """
+    Extrai os itens da fatura de um PDF.
+    """
+    try:
+        # Detecta a codificação do arquivo
+        encoding = detect_encoding(pdf_path)
+
+        # Extrai todas as tabelas do PDF
+        tabelas = read_pdf(pdf_path, pages=1, multiple_tables=True, pandas_options={'header': None}, encoding=encoding)
+
+        # Identifica a tabela relevante
+        tabela_itens, tabela_idx = identificar_tabela(tabelas)
+
+        # Ajusta a tabela identificada
+        tabela_itens = tratar_tabela_itens(tabela_itens, tabela_idx)
+
+        # Processar os dados
+        dados = []
+        for _, row in tabela_itens.iterrows():
+            valores = str(row["Itens de Fatura"]).split()
+            descricao = " ".join(valores[:-1]) if len(valores) > 1 else row["Itens de Fatura"]
+            quantidade = limpar_numero(valores[-1]) if len(valores) > 1 else limpar_numero(row["Quant."])
+
+            dados.append({
+                "descricao": descricao,
+                "quantidade": quantidade,
+                "preco_unitario": limpar_numero(row["Preço Unit.(R$)"]),
+                "tarifa": limpar_numero(row["Tarifa"]),
+                "pis_cofins": limpar_numero(row["PIS/"]),
+                "icms": limpar_numero(row["ICMS"]),
+                "valor": limpar_numero(row["Valor(R$)"]),
+            })
+
+        return dados
+
+    except Exception as e:
+        raise ValueError(f"Erro ao extrair itens de fatura: {e}")

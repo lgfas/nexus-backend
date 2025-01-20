@@ -11,6 +11,7 @@ from .models import ContaEnergia, ItemFatura, Tributo
 from .serializers import ContaEnergiaSerializer, ItemFaturaSerializer, TributoSerializer
 from .services import calcular_valor_total
 from .utils import extract_itens_fatura, extract_historico_data, extract_tributos
+from .utils import extract_itens_fatura, extract_historico_data, extract_tributos, extract_itens_fatura_generalizado
 from ..clientes.models import Cliente
 from ..historicos.models import HistoricoConsumoDemanda
 
@@ -106,6 +107,59 @@ class UploadFaturaAPIView(APIView):
                     "error": f"Erro ao processar o PDF: {str(e)}",
                     "details": error_details,
                 },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+class ItensFaturaAPIView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request, *args, **kwargs):
+        conta_id = request.data.get('conta_energia_id')
+        pdf_file = request.FILES.get('file')
+
+        # Validações iniciais
+        if not pdf_file:
+            return Response({"error": "Nenhum arquivo enviado."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not conta_id:
+            return Response({"error": "O ID da conta de energia é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validar a conta de energia
+        try:
+            conta_energia = ContaEnergia.objects.get(id=conta_id)
+        except ContaEnergia.DoesNotExist:
+            return Response({"error": "Conta de energia não encontrada."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            # Criar caminho temporário multiplataforma
+            temp_dir = tempfile.gettempdir()
+            safe_filename = "".join(x for x in pdf_file.name if x.isalnum() or x in "._-")  # Limpar caracteres inválidos
+            temp_path = os.path.join(temp_dir, safe_filename)
+
+            # Salvar o arquivo temporário
+            with open(temp_path, 'wb') as temp_file:
+                for chunk in pdf_file.chunks():
+                    temp_file.write(chunk)
+
+            # Extrair os itens da fatura
+            itens_fatura = extract_itens_fatura_generalizado(temp_path)
+
+            # Salvar os itens de fatura no banco de dados
+            for item in itens_fatura:
+                ItemFatura.objects.create(conta_energia=conta_energia, **item)
+
+            # Remover o arquivo temporário
+            os.remove(temp_path)
+
+            return Response({"message": "Itens de fatura processados e salvos com sucesso."}, status=status.HTTP_201_CREATED)
+
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            return Response(
+                {"error": f"Erro ao processar o PDF: {str(e)}", "details": error_details},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
