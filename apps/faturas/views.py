@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 
 from .models import ContaEnergia, ItemFatura, Tributo
 from .serializers import ContaEnergiaSerializer, ItemFaturaSerializer, TributoSerializer
+from .services import calcular_valor_total
 from .utils import extract_itens_fatura, extract_historico_data, extract_tributos
 from ..clientes.models import Cliente
 from ..historicos.models import HistoricoConsumoDemanda
@@ -108,3 +109,38 @@ class UploadFaturaAPIView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+class CalcularMelhoriaModalidadeAPIView(APIView):
+    def get(self, request, conta_id, *args, **kwargs):
+        # Buscar a conta de energia pelo ID
+        try:
+            conta_energia = ContaEnergia.objects.get(id=conta_id)
+        except ContaEnergia.DoesNotExist:
+            return Response({"error": "Conta de energia não encontrada."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            # Calcular para a modalidade alternativa
+            resultado = calcular_valor_total(conta_energia)
+
+            # Verificar qual modalidade é mais eficiente
+            valor_atual = conta_energia.total_pagar
+            valor_calculado = resultado["valor_total_calculado"]
+            modalidade_atual = conta_energia.modalidade
+            modalidade_alternativa = "Azul" if modalidade_atual == "Verde" else "Verde"
+
+            # Mensagem de resposta
+            mensagem = (
+                f"Modalidade atual ({modalidade_atual}): R$ {valor_atual:.2f}. "
+                f"Modalidade alternativa ({modalidade_alternativa}): R$ {valor_calculado:.2f}. "
+            )
+            if valor_calculado < valor_atual:
+                mensagem += f"A mudança para {modalidade_alternativa} seria mais eficiente."
+            else:
+                mensagem += f"Permanecer na modalidade {modalidade_atual} é mais vantajoso."
+
+            return Response({"mensagem": mensagem}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {"error": "Erro ao calcular a modalidade mais eficiente.", "detalhes": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
