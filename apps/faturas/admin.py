@@ -33,7 +33,7 @@ class ItemFaturaAdmin(admin.ModelAdmin):
         'preco_unitario', 'tarifa', 'pis_cofins', 'icms', 'valor'
     )
     search_fields = ('conta_energia__cliente__nome', 'descricao')
-    list_filter = ('conta_energia__mes',)
+    list_filter = ('conta_energia__mes', 'conta_energia')
     ordering = ('conta_energia',)
 
 @admin.register(Tributo)
