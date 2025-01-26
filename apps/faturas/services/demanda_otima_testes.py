@@ -5,42 +5,9 @@ from apps.faturas.services.tarifa import buscar_tarifa_api
 from apps.historicos.models import HistoricoConsumoDemanda
 
 
-def encontrar_demanda_ideal(conta_energia):
+def demanda_otima_verde_teste(conta_energia, demanda_contratada_unica_teste):
 
-    historico_conta = HistoricoConsumoDemanda.objects.filter(cliente=conta_energia.cliente)
-
-    # Obter os valores possíveis de demanda a partir do histórico
-    valores_demanda = []
-    for historico in historico_conta:
-        valores_demanda.append(historico.demanda_medida_ponta)
-        valores_demanda.append(historico.demanda_medida_fora_ponta)
-
-    # Remover duplicatas e garantir que os valores estejam ordenados
-    valores_demanda = sorted(set(valores_demanda))
-
-    menor_total_rs = Decimal('Infinity')
-    melhor_demanda = None
-
-    # Testar cada valor de demanda como demanda_contratada_unica
-    for demanda_candidata in valores_demanda:
-        conta_energia.demanda_contratada_unica = Decimal(demanda_candidata)
-        total_rs = calcular_total_rs(conta_energia)
-
-        print(f"Demanda Contratada Unica: {demanda_candidata}, Total RS: {total_rs}")
-
-        # Verificar se o total atual é o menor encontrado
-        if total_rs < menor_total_rs:
-            menor_total_rs = total_rs
-            melhor_demanda = demanda_candidata
-
-    print(f"\nMelhor Demanda Contratada Unica: {melhor_demanda}")
-    print(f"Menor Valor Total RS: R$ {menor_total_rs}")
-    return melhor_demanda, menor_total_rs
-
-
-def calcular_total_rs(conta_energia):
-    # Código da função `demanda_otima_verde`, ajustado para retornar o total_rs
-    demanda_contratada_unica = Decimal(conta_energia.demanda_contratada_unica)
+    demanda_contratada_unica = Decimal(demanda_contratada_unica_teste)
 
     tolerancia = demanda_contratada_unica * Decimal(1.05)
 
@@ -48,6 +15,7 @@ def calcular_total_rs(conta_energia):
     demanda_isenta = Decimal(0)
     demanda_ultrapassagem = Decimal(0)
     total_rs = Decimal(0)
+
 
     tarifa = buscar_tarifa_api(
         distribuidora=conta_energia.distribuidora.nome,
@@ -60,6 +28,7 @@ def calcular_total_rs(conta_energia):
     )
 
     tarifa_base = tarifa["valor_tusd"] + tarifa["valor_te"]
+
     tarifa_ultrapassagem = 2 * tarifa_base
 
     tributos = Tributo.objects.filter(conta_energia=conta_energia)
@@ -74,13 +43,17 @@ def calcular_total_rs(conta_energia):
                       )
 
     tarifa_ultrapassagem_ci = (tarifa_ultrapassagem /
-                               (1 - Decimal(pis.aliquota / 100) - Decimal(cofins.aliquota / 100)) /
-                               (1 - Decimal(icms.aliquota / 100))
-                               )
+                      (1 - Decimal(pis.aliquota / 100) - Decimal(cofins.aliquota / 100)) /
+                      (1 - Decimal(icms.aliquota / 100))
+                      )
 
     tarifa_isenta_icms = (tarifa_base /
-                          (1 - Decimal(pis.aliquota / 100) - Decimal(cofins.aliquota / 100))
+                      (1 - Decimal(pis.aliquota / 100) - Decimal(cofins.aliquota / 100))
                           )
+
+    print(f"\nTarifa Base Com Impostos: {tarifa_base_ci}"
+          f"\nTarifa Ultrapassagem Com Impostos: {tarifa_ultrapassagem_ci}"
+          f"\nTarifa Isenta ICMS: {tarifa_isenta_icms}\n")
 
     historico_conta = HistoricoConsumoDemanda.objects.filter(cliente=conta_energia.cliente)
 
@@ -111,4 +84,12 @@ def calcular_total_rs(conta_energia):
 
         total_rs += demanda_rs + demanda_isenta_rs + demanda_ultrapassagem_rs
 
-    return total_rs
+        print(f"\nDemanda: {demanda}"
+              f"\nDemanda Isenta: {demanda_isenta}"
+              f"\nDemanda Ultrapassagem: {demanda_ultrapassagem}"
+              f"\nTotal {historico} R$ {total_rs}\n")
+
+    print(f"Demanda Contratada Unica (kW): {demanda_contratada_unica}"
+          f"\nValor total: R$ {total_rs}"
+          f"\nMedia mensal: R$ {total_rs / Decimal(13)}"
+          )
