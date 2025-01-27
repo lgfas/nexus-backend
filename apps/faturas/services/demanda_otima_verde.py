@@ -1,11 +1,10 @@
 from decimal import Decimal
 
-from apps.faturas.models import Tributo
-from apps.faturas.services.tarifa import buscar_tarifa_api
+from apps.faturas.services.tarifa import buscar_tarifa_api, calcular_tarifas_com_impostos
 from apps.historicos.models import HistoricoConsumoDemanda
 
 
-def encontrar_demanda_ideal(conta_energia):
+def encontrar_demanda_ideal_verde(conta_energia):
 
     historico_conta = HistoricoConsumoDemanda.objects.filter(cliente=conta_energia.cliente)
 
@@ -24,7 +23,7 @@ def encontrar_demanda_ideal(conta_energia):
     # Testar cada valor de demanda como demanda_contratada_unica
     for demanda_candidata in valores_demanda:
         conta_energia.demanda_contratada_unica = Decimal(demanda_candidata)
-        total_rs = calcular_total_rs(conta_energia)
+        total_rs = calcular_total_rs_verde(conta_energia)
 
         print(f"Demanda Contratada Unica: {demanda_candidata}, Total RS: {total_rs}")
 
@@ -38,7 +37,7 @@ def encontrar_demanda_ideal(conta_energia):
     return melhor_demanda, menor_total_rs
 
 
-def calcular_total_rs(conta_energia):
+def calcular_total_rs_verde(conta_energia):
     # Código da função `demanda_otima_verde`, ajustado para retornar o total_rs
     demanda_contratada_unica = Decimal(conta_energia.demanda_contratada_unica)
 
@@ -60,27 +59,11 @@ def calcular_total_rs(conta_energia):
     )
 
     tarifa_base = tarifa["valor_tusd"] + tarifa["valor_te"]
-    tarifa_ultrapassagem = 2 * tarifa_base
 
-    tributos = Tributo.objects.filter(conta_energia=conta_energia)
-
-    pis = tributos.filter(tipo="PIS").first()
-    cofins = tributos.filter(tipo="COFINS").first()
-    icms = tributos.filter(tipo="ICMS").first()
-
-    tarifa_base_ci = (tarifa_base /
-                      (1 - Decimal(pis.aliquota / 100) - Decimal(cofins.aliquota / 100)) /
-                      (1 - Decimal(icms.aliquota / 100))
-                      )
-
-    tarifa_ultrapassagem_ci = (tarifa_ultrapassagem /
-                               (1 - Decimal(pis.aliquota / 100) - Decimal(cofins.aliquota / 100)) /
-                               (1 - Decimal(icms.aliquota / 100))
-                               )
-
-    tarifa_isenta_icms = (tarifa_base /
-                          (1 - Decimal(pis.aliquota / 100) - Decimal(cofins.aliquota / 100))
-                          )
+    tarifas = calcular_tarifas_com_impostos(tarifa_base, conta_energia)
+    tarifa_base_ci = tarifas["tarifa_base_ci"]
+    tarifa_ultrapassagem_ci = tarifas["tarifa_ultrapassagem_ci"]
+    tarifa_isenta_icms = tarifas["tarifa_isenta_icms"]
 
     historico_conta = HistoricoConsumoDemanda.objects.filter(cliente=conta_energia.cliente)
 

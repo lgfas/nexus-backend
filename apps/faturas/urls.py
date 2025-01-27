@@ -1,8 +1,7 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .views import ContaEnergiaViewSet, ItemFaturaViewSet, UploadFaturaAPIView, TributoViewSet, \
-    CalcularMelhoriaModalidadeAPIView
+from .views import CalcularMelhoriaModalidadeAPIView
 from .views import ContaEnergiaViewSet, ItemFaturaViewSet, UploadFaturaAPIView, TributoViewSet, ItensFaturaAPIView
 
 router = DefaultRouter()
