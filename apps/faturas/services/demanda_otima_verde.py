@@ -50,7 +50,7 @@ def calcular_total_rs_verde(conta_energia):
 
     tarifa = buscar_tarifa_api(
         distribuidora=conta_energia.distribuidora.nome,
-        modalidade=conta_energia.modalidade,
+        modalidade="Verde",
         subgrupo=conta_energia.subgrupo,
         tipo_tarifa="Tarifa de Aplicação",
         posto_tarifario="Não se aplica",
