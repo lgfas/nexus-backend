@@ -4,54 +4,70 @@ from apps.faturas.models import Tributo
 from apps.faturas.services.tarifa import buscar_tarifa_api
 
 
-def calcular_demanda(conta_energia, modalidade, itens_fatura, posto_tarifario):
-    demanda_total = Decimal(0)
-    preco_unitario_local = Decimal(0)
+def calcular_tarifa_base_demanda(conta_energia, modalidade, posto_tarifario):
 
-    for item in itens_fatura:
-        # Buscar tarifa na API (unidade kW)
-        tarifa = buscar_tarifa_api(
-            distribuidora=conta_energia.distribuidora.nome,
-            modalidade=modalidade,
-            subgrupo=conta_energia.subgrupo,
-            tipo_tarifa="Tarifa de Aplicação",
-            posto_tarifario=posto_tarifario,
-            data_vencimento=conta_energia.vencimento,
-            unidade="kW"  # Unidade ajustada para demanda
-        )
+    tarifa_base = Decimal(0)
 
-        if not tarifa:
-            print(f"Tarifa não encontrada para {posto_tarifario}.")
-            continue
+    # Buscar tarifa na API (unidade kW)
+    tarifa = buscar_tarifa_api(
+        distribuidora=conta_energia.distribuidora.nome,
+        modalidade=modalidade,
+        subgrupo=conta_energia.subgrupo,
+        tipo_tarifa="Tarifa de Aplicação",
+        posto_tarifario=posto_tarifario,
+        data_vencimento=conta_energia.vencimento,
+        unidade="kW"  # Unidade ajustada para demanda
+    )
 
-        print(f"Tarifa Base Calculada: TUSD={tarifa['valor_tusd']}, TE={tarifa['valor_te']}")
+    if not tarifa:
+        print(f"Tarifa não encontrada para {posto_tarifario}.")
 
-        # Calcular tarifa base (TUSD + TE)
-        tarifa_base = tarifa["valor_tusd"] + tarifa["valor_te"]
-        print(f"Tarifa Base Calculada: {tarifa_base}")
+    print(f"Tarifa Base Calculada: TUSD={tarifa['valor_tusd']}, TE={tarifa['valor_te']}")
 
-        tributos = Tributo.objects.filter(conta_energia=conta_energia)
-        pis = tributos.filter(tipo="PIS").first()
-        cofins = tributos.filter(tipo="COFINS").first()
-        icms = tributos.filter(tipo="ICMS").first()
+    # Calcular tarifa base (TUSD + TE)
+    tarifa_base = tarifa["valor_tusd"] + tarifa["valor_te"]
+    print(f"Tarifa Base Calculada: {tarifa_base}")
 
-        if not pis or not cofins or not icms:
-            print("Tributos PIS, COFINS ou ICMS não encontrados.")
-            continue
+    return tarifa_base
 
-        # Calcular preço unitário
-        preco_unitario_local = tarifa_base / (
-                (1 - Decimal(pis.aliquota / 100) - Decimal(cofins.aliquota / 100)) /
-                (1 - Decimal(icms.aliquota / 100))
-        )
+def calcular_demandas(quantidade_demanda, demanda_contratada, tarifa_base_ci, tarifa_ultrapassagem_ci, tarifa_isenta_icms):
+    """
+    Calcula os valores das demandas contratadas, isentas e de ultrapassagem.
+    """
 
-        print(f"Preço unitário calculado: {preco_unitario_local}")
+    # Garantir que os valores são Decimal
+    quantidade_demanda = Decimal(str(quantidade_demanda)) if not isinstance(quantidade_demanda, Decimal) else quantidade_demanda
+    demanda_contratada = Decimal(str(demanda_contratada)) if not isinstance(demanda_contratada, Decimal) else demanda_contratada
 
-        # Calcular demanda
-        quantidade = Decimal(item.quantidade or 0)
-        demanda = quantidade * preco_unitario_local
-        print(f"Demanda para item {item.descricao}: {demanda}\n")
+    # Tolerância de 5%
+    tolerancia = demanda_contratada * Decimal(1.05)
 
-        demanda_total += demanda
+    # Inicializa valores
+    demanda_ultrapassagem = Decimal(0)
+    demanda_isenta = Decimal(0)
 
-    return demanda_total, preco_unitario_local, quantidade
+    # Condições para cálculo da demanda
+    if quantidade_demanda < demanda_contratada:
+        demanda_isenta = demanda_contratada - quantidade_demanda
+    elif quantidade_demanda > tolerancia:
+        demanda_ultrapassagem = quantidade_demanda - demanda_contratada
+
+    # Cálculo dos valores em reais (R$)
+    demanda_rs = quantidade_demanda * tarifa_base_ci
+    demanda_isenta_rs = demanda_isenta * tarifa_isenta_icms
+    demanda_ultrapassagem_rs = demanda_ultrapassagem * tarifa_ultrapassagem_ci
+
+    # Depuração: Imprimir os valores calculados para verificação
+    print(f"\n--- Cálculo de Demanda ---"
+          f"\nQuantidade Demanda: {quantidade_demanda} kW"
+          f"\nDemanda Contratada: {demanda_contratada} kW"
+          f"\nTolerância (5% acima): {tolerancia} kW"
+          f"\nDemanda Isenta: {demanda_isenta} kW"
+          f"\nDemanda Ultrapassagem: {demanda_ultrapassagem} kW"
+          f"\n---------------------------------")
+
+    return {
+        "demanda_rs": demanda_rs,
+        "demanda_isenta_rs": demanda_isenta_rs,
+        "demanda_ultrapassagem_rs": demanda_ultrapassagem_rs,
+    }
