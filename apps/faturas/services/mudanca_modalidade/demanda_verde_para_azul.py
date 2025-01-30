@@ -44,10 +44,6 @@ def calcular_demanda_verde_para_azul_otimizada(conta_energia):
 
     print(f"Valores convertidos para Decimal: {demanda_contratada_ponta}, {demanda_contratada_fora_ponta}")
 
-
-    tolerancia_ponta = demanda_contratada_ponta * Decimal(1.05)
-    tolerancia_fora_ponta = demanda_contratada_fora_ponta * Decimal(1.05)
-
     item_fatura_ponta = ItemFatura.objects.filter(
         conta_energia=conta_energia,
         descricao__icontains="Demanda Ponta"
