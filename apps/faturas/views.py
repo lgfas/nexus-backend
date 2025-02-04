@@ -2,9 +2,8 @@ import os
 import tempfile
 
 import chardet  # Para detectar a codificação
-from rest_framework import status, viewsets
+from rest_framework import viewsets
 from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import ContaEnergia, ItemFatura, Tributo
@@ -186,6 +185,184 @@ class CalcularMelhoriaModalidadeAPIView(APIView):
                 f"Modalidade alternativa ({modalidade_alternativa}): R$ {valor_calculado:.2f}. "
             )
             if valor_calculado < valor_atual:
+                mensagem += f"A mudança para {modalidade_alternativa} seria mais eficiente."
+            else:
+                mensagem += f"Permanecer na modalidade {modalidade_atual} é mais vantajoso."
+
+            return Response({"mensagem": mensagem}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {"error": "Erro ao calcular a modalidade mais eficiente.", "detalhes": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+class CalcularMelhorConsumoAnualAPIView(APIView):
+    """
+    API para calcular o consumo anual e sugerir a modalidade mais eficiente.
+    """
+
+    def get(self, request, conta_id, *args, **kwargs):
+        try:
+            conta_energia = ContaEnergia.objects.get(id=conta_id)
+        except ContaEnergia.DoesNotExist:
+            return Response({"error": "Conta de energia não encontrada."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            modalidade_atual = conta_energia.modalidade
+            modalidade_alternativa = "Azul" if modalidade_atual == "Verde" else "Verde"
+
+            consumo_atual = calcular_consumo_anual(conta_energia, modalidade_atual)
+            consumo_alternativo = calcular_consumo_anual(conta_energia, modalidade_alternativa)
+
+            mensagem = (
+                f"Consumo anual na modalidade atual ({modalidade_atual}): R$ {consumo_atual:.2f}. "
+                f"Consumo anual na modalidade alternativa ({modalidade_alternativa}): R$ {consumo_alternativo:.2f}. "
+            )
+
+            if consumo_alternativo < consumo_atual:
+                mensagem += f"A mudança para {modalidade_alternativa} seria mais eficiente."
+            else:
+                mensagem += f"Permanecer na modalidade {modalidade_atual} é mais vantajoso."
+
+            return Response({"mensagem": mensagem}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {"error": "Erro ao calcular o consumo anual mais eficiente.", "detalhes": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+from rest_framework.views import APIView
+
+
+class CalcularMelhorDemandaAPIView(APIView):
+    """
+    API para calcular a melhor demanda e sugerir a modalidade mais eficiente.
+    """
+
+    def get(self, request, conta_id, *args, **kwargs):
+        try:
+            conta_energia = ContaEnergia.objects.get(id=conta_id)
+        except ContaEnergia.DoesNotExist:
+            return Response({"error": "Conta de energia não encontrada."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            modalidade_atual = conta_energia.modalidade
+            modalidade_alternativa = "Azul" if modalidade_atual == "Verde" else "Verde"
+
+            # Calcular demanda na modalidade atual
+            if modalidade_atual == "Verde":
+                melhor_demanda_atual, menor_total_rs_atual = encontrar_demanda_ideal_verde(conta_energia)
+            else:
+                demanda_azul = encontrar_demanda_ideal_azul(conta_energia)
+                melhor_demanda_atual = (
+                    demanda_azul["melhor_demanda_ponta"] + demanda_azul["melhor_demanda_fora_ponta"]
+                )
+                menor_total_rs_atual = (
+                    demanda_azul["menor_total_rs_ponta"] + demanda_azul["menor_total_rs_fora_ponta"]
+                )
+
+            # Calcular demanda na modalidade alternativa
+            if modalidade_alternativa == "Verde":
+                melhor_demanda_alternativa, menor_total_rs_alternativa = encontrar_demanda_ideal_verde(conta_energia)
+            else:
+                demanda_azul = encontrar_demanda_ideal_azul(conta_energia)
+                melhor_demanda_alternativa = (
+                    demanda_azul["melhor_demanda_ponta"] + demanda_azul["melhor_demanda_fora_ponta"]
+                )
+                menor_total_rs_alternativa = (
+                    demanda_azul["menor_total_rs_ponta"] + demanda_azul["menor_total_rs_fora_ponta"]
+                )
+
+            # Mensagem de comparação
+            mensagem = (
+                f"Demanda na modalidade atual ({modalidade_atual}): {melhor_demanda_atual} kW - "
+                f"Custo: R$ {menor_total_rs_atual:.2f}. "
+                f"Demanda na modalidade alternativa ({modalidade_alternativa}): {melhor_demanda_alternativa} kW - "
+                f"Custo: R$ {menor_total_rs_alternativa:.2f}. "
+            )
+
+            if menor_total_rs_alternativa < menor_total_rs_atual:
+                mensagem += f"A mudança para {modalidade_alternativa} seria mais eficiente."
+            else:
+                mensagem += f"Permanecer na modalidade {modalidade_atual} é mais vantajoso."
+
+            return Response({"mensagem": mensagem}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {"error": "Erro ao calcular a demanda mais eficiente.", "detalhes": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
+from apps.faturas.models import ContaEnergia
+from apps.faturas.services.consumo_anual import calcular_consumo_anual
+from apps.faturas.services.demanda_otima_azul import encontrar_demanda_ideal_azul
+from apps.faturas.services.demanda_otima_verde import encontrar_demanda_ideal_verde
+
+
+class CalcularMelhorModalidadeAPIView(APIView):
+    """
+    API para calcular e comparar os custos totais (consumo + demanda)
+    entre a modalidade atual e a alternativa.
+    """
+
+    def get(self, request, conta_id, *args, **kwargs):
+        try:
+            conta_energia = ContaEnergia.objects.get(id=conta_id)
+        except ContaEnergia.DoesNotExist:
+            return Response({"error": "Conta de energia não encontrada."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            modalidade_atual = conta_energia.modalidade
+            modalidade_alternativa = "Azul" if modalidade_atual == "Verde" else "Verde"
+
+            # 🔹 Calcular consumo para ambas as modalidades
+            consumo_atual = calcular_consumo_anual(conta_energia, modalidade_atual)
+            consumo_alternativo = calcular_consumo_anual(conta_energia, modalidade_alternativa)
+
+            # 🔹 Calcular demanda para a modalidade atual
+            if modalidade_atual == "Verde":
+                melhor_demanda_atual, menor_total_rs_atual = encontrar_demanda_ideal_verde(conta_energia)
+            else:
+                demanda_azul = encontrar_demanda_ideal_azul(conta_energia)
+                melhor_demanda_atual = (
+                    demanda_azul["melhor_demanda_ponta"] + demanda_azul["melhor_demanda_fora_ponta"]
+                )
+                menor_total_rs_atual = (
+                    demanda_azul["menor_total_rs_ponta"] + demanda_azul["menor_total_rs_fora_ponta"]
+                )
+
+            # 🔹 Calcular demanda para a modalidade alternativa
+            if modalidade_alternativa == "Verde":
+                melhor_demanda_alternativa, menor_total_rs_alternativa = encontrar_demanda_ideal_verde(conta_energia)
+            else:
+                demanda_azul = encontrar_demanda_ideal_azul(conta_energia)
+                melhor_demanda_alternativa = (
+                    demanda_azul["melhor_demanda_ponta"] + demanda_azul["melhor_demanda_fora_ponta"]
+                )
+                menor_total_rs_alternativa = (
+                    demanda_azul["menor_total_rs_ponta"] + demanda_azul["menor_total_rs_fora_ponta"]
+                )
+
+            # 🔹 Somar consumo e demanda para cada modalidade
+            total_atual = consumo_atual + menor_total_rs_atual
+            total_alternativo = consumo_alternativo + menor_total_rs_alternativa
+
+            # 🔹 Gerar mensagem de resposta
+            mensagem = (
+                f"Modalidade atual ({modalidade_atual}): R$ {total_atual:.2f} "
+                f"(Consumo: R$ {consumo_atual:.2f}, Demanda: R$ {menor_total_rs_atual:.2f}). "
+                f"Modalidade alternativa ({modalidade_alternativa}): R$ {total_alternativo:.2f} "
+                f"(Consumo: R$ {consumo_alternativo:.2f}, Demanda: R$ {menor_total_rs_alternativa:.2f}). "
+            )
+
+            if total_alternativo < total_atual:
                 mensagem += f"A mudança para {modalidade_alternativa} seria mais eficiente."
             else:
                 mensagem += f"Permanecer na modalidade {modalidade_atual} é mais vantajoso."

@@ -94,6 +94,8 @@ def demanda_otima_verde_teste(conta_energia, demanda_contratada_unica_teste):
           f"\nMedia mensal: R$ {total_rs / Decimal(13)}"
           )
 
+    return demanda_contratada_unica, total_rs
+
 def demanda_otima_azul_teste(conta_energia, posto_tarifario):
 
     demanda_contratada_unica = Decimal('0')
@@ -189,3 +191,5 @@ def demanda_otima_azul_teste(conta_energia, posto_tarifario):
           f"\nValor total: R$ {total_rs}"
           f"\nMedia mensal: R$ {total_rs / Decimal(13)}"
           )
+
+    return demanda_contratada_unica, total_rs
