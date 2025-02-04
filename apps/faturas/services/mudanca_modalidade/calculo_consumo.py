@@ -74,9 +74,9 @@ def calcular_consumo_api(conta_energia, modalidade_analise):
 
         return {
             "consumo_ponta": consumo_ponta,
-            "consumo_foral": consumo_fora_ponta,
+            "consumo_fora_ponta": consumo_fora_ponta,
             "consumo": consumo,
         }
 
     except Exception as e:
-        raise ValueError(f"Erro ao calcular consumo azul: {e}")
+        raise ValueError(f"Erro ao calcular consumo: {e}")

@@ -8,8 +8,7 @@ from apps.faturas.services.tarifa import calcular_tarifas_com_impostos
 
 def calcular_demanda_azul_para_verde_otimizada(conta_energia):
     """
-    Calcula a demanda azul (demanda ponta, fora ponta e excedente) com base na conta de energia,
-    utilizando a API da ANEEL para buscar tarifas.
+    Calcula a demanda azul para a demanda verde, buscando a demanda contratada ideal da verde
     """
 
     quantidade_demanda_ativa = Decimal(0)
@@ -68,3 +67,9 @@ def calcular_demanda_azul_para_verde_otimizada(conta_energia):
     print(f"\nDemanda Ativa: R$ {demanda_ativa_rs}"
           f"\nDemanda Isenta ICMS: R$ {demanda_isenta_icms_rs}"
           f"\nDemanda Ultrapassagem: R$ {demanda_ultrapassagem_rs}")
+
+    return {
+        "demanda_ativa_rs": demanda_ativa_rs,
+        "demanda_isenta_icms_rs": demanda_isenta_icms_rs,
+        "demanda_ultrapassagem_rs": demanda_ultrapassagem_rs,
+    }

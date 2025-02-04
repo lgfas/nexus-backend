@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 
 from .models import ContaEnergia, ItemFatura, Tributo
 from .serializers import ContaEnergiaSerializer, ItemFaturaSerializer, TributoSerializer
-from apps.faturas.service import calcular_valor_total
+from .services.mudanca_modalidade.calculo_total import calcular_valor_total
 from .utils import extract_itens_fatura, extract_historico_data, extract_tributos, extract_itens_fatura_generalizado
 from ..clientes.models import Cliente
 from ..historicos.models import HistoricoConsumoDemanda
