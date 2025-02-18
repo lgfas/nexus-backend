@@ -30,7 +30,6 @@ INSTALLED_APPS = [
     'rest_framework',
     'apps.clientes',
     'apps.faturas',
-    'apps.parceiros',
     'apps.historicos',
     'apps.tarifas',
     'drf_yasg',
