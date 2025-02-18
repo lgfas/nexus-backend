@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'apps.historicos',
     'apps.tarifas',
     'drf_yasg',
+    'django_extensions',
 ]
 
 MIDDLEWARE = [
